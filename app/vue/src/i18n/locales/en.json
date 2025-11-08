@@ -8,7 +8,7 @@
     "title": "Navigation",
     "select_page": "Choose a page",
     "dashboard": "Dashboard",
-    "upload": "Upload Documents",
+    "knowledge_build": "Knowledge Build",
     "graph_visualization": "Graph Visualization",
     "query": "Knowledge Query",
     "status": "Processing Status"
@@ -65,22 +65,32 @@
   "upload": {
     "title": "Upload Document",
     "choose_file": "Choose a file",
-    "supported_formats": "Supported formats: PDF, Markdown",
+    "supported_formats": "Supported formats: PDF, Markdown, TXT, Word (DOC/DOCX)",
+    "drag_hint": "Click or drag files to this area to upload",
     "file": "File",
     "size": "Size",
     "bytes": "bytes",
     "upload_process": "Upload & Process",
     "uploading": "Uploading file...",
     "upload_success": "File uploaded successfully!",
+    "upload_success_desc": "Document uploaded successfully, ready to process",
     "view_result": "View Upload Result",
     "document_id": "Document ID",
     "start_ingestion": "Start Ingestion",
     "starting": "Starting ingestion...",
     "ingestion_started": "Ingestion started!",
+    "ingestion_started_desc": "Processing task started, analyzing document content",
     "view_ingestion_result": "View Ingestion Result",
     "job_id": "Job ID",
     "check_status": "Check status on Status page",
-    "error": "Error"
+    "upload_new": "Upload New Document",
+    "error": "Error",
+    "invalid_file_type": "Invalid file type. Only PDF, Markdown, TXT, and Word (DOC/DOCX) files are supported.",
+    "file_selected": "File selected: {name}"
+  },
+  "knowledge": {
+    "title": "Knowledge Build",
+    "description": "Aggregate documents, text, and links to construct your domain knowledge graph."
   },
   "graph": {
     "title": "Knowledge Graph Visualization",

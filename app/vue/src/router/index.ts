@@ -1,7 +1,7 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import i18n from '@/i18n'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
@@ -13,10 +13,10 @@ const routes = [
         meta: { title: 'dashboard.title' }
       },
       {
-        path: 'upload',
-        name: 'Upload',
+        path: 'knowledge',
+        name: 'KnowledgeBuild',
         component: () => import('@/views/Upload.vue'),
-        meta: { title: 'upload.title' }
+        meta: { title: 'knowledge.title' }
       },
       {
         path: 'graph',
@@ -54,7 +54,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   if (to.meta.title) {
     const t = i18n.global.t
-    document.title = `${t(to.meta.title)} | ${t('app.page_title')}`
+    document.title = `${t(to.meta.title as string)} | ${t('app.page_title')}`
   }
   next()
 })

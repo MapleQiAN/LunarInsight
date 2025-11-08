@@ -23,10 +23,12 @@ export default defineConfig({
             'useLoadingBar'
           ]
         }
-      ]
+      ],
+      dts: 'src/auto-imports.d.ts'
     }),
     Components({
-      resolvers: [NaiveUiResolver()]
+      resolvers: [NaiveUiResolver()],
+      dts: 'src/components.d.ts'
     })
   ],
   resolve: {

@@ -1,8 +1,8 @@
-import axios from 'axios'
+import axios, { type AxiosInstance, type InternalAxiosRequestConfig, type AxiosResponse } from 'axios'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
-const api = axios.create({
+const api: AxiosInstance = axios.create({
   baseURL: API_BASE,
   timeout: 30000,
   headers: {
@@ -12,7 +12,7 @@ const api = axios.create({
 
 // Request interceptor
 api.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig) => {
     return config
   },
   (error) => {
@@ -22,7 +22,7 @@ api.interceptors.request.use(
 
 // Response interceptor
 api.interceptors.response.use(
-  (response) => {
+  (response: AxiosResponse) => {
     return response.data
   },
   (error) => {

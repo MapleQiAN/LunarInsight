@@ -8,7 +8,7 @@
     "title": "导航",
     "select_page": "选择页面",
     "dashboard": "仪表盘",
-    "upload": "文档上传",
+    "knowledge_build": "知识构建",
     "graph_visualization": "图谱可视化",
     "query": "知识查询",
     "status": "处理状态"
@@ -65,22 +65,32 @@
   "upload": {
     "title": "上传文档",
     "choose_file": "选择文件",
-    "supported_formats": "支持格式: PDF, Markdown",
+    "supported_formats": "支持格式：PDF、Markdown、TXT、Word（DOC/DOCX）",
+    "drag_hint": "点击或拖拽文件到此区域上传",
     "file": "文件",
     "size": "大小",
     "bytes": "字节",
     "upload_process": "上传并处理",
     "uploading": "正在上传文件...",
     "upload_success": "文件上传成功！",
+    "upload_success_desc": "文档已成功上传，准备开始处理",
     "view_result": "查看上传结果",
     "document_id": "文档 ID",
     "start_ingestion": "开始处理",
     "starting": "正在启动处理流程...",
     "ingestion_started": "处理已启动！",
+    "ingestion_started_desc": "处理任务已启动，正在分析文档内容",
     "view_ingestion_result": "查看处理结果",
     "job_id": "任务 ID",
     "check_status": "可在状态页面查看进度",
-    "error": "错误"
+    "upload_new": "上传新文档",
+    "error": "错误",
+    "invalid_file_type": "文件类型不支持。仅支持 PDF、Markdown、TXT 和 Word（DOC/DOCX）文件。",
+    "file_selected": "已选择文件：{name}"
+  },
+  "knowledge": {
+    "title": "知识构建",
+    "description": "整合文档、文本、链接，构建你的领域知识图谱。"
   },
   "graph": {
     "title": "知识图谱可视化",
