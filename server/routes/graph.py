@@ -39,14 +39,16 @@ async def query_graph(
             # Extract nodes
             if "n" in record and record["n"]:
                 node = record["n"]
-                if hasattr(node, "id"):
-                    node_id = node.get("id") or node.get("name") or str(node.id)
-                    labels = list(node.labels) if hasattr(node, "labels") else []
-                    props = dict(node)
-                else:
-                    node_id = node.get("id") or node.get("name") or str(hash(str(node)))
-                    labels = node.get("labels", [])
-                    props = node if isinstance(node, dict) else {}
+                # Neo4j Node object: use dict(node) to get properties
+                props = dict(node) if hasattr(node, "__getitem__") else {}
+                labels = list(node.labels) if hasattr(node, "labels") else []
+                
+                # Get business ID from properties (id field in Document/Concept)
+                # Fallback to name, or use Neo4j internal element_id
+                node_id = props.get("id") or props.get("name")
+                if not node_id:
+                    # Use Neo4j internal ID as fallback
+                    node_id = getattr(node, "element_id", None) or str(getattr(node, "id", hash(str(node))))
                 
                 if node_id not in nodes_dict:
                     nodes_dict[node_id] = Node(
@@ -57,14 +59,12 @@ async def query_graph(
             
             if "m" in record and record["m"]:
                 node = record["m"]
-                if hasattr(node, "id"):
-                    node_id = node.get("id") or node.get("name") or str(node.id)
-                    labels = list(node.labels) if hasattr(node, "labels") else []
-                    props = dict(node)
-                else:
-                    node_id = node.get("id") or node.get("name") or str(hash(str(node)))
-                    labels = node.get("labels", [])
-                    props = node if isinstance(node, dict) else {}
+                props = dict(node) if hasattr(node, "__getitem__") else {}
+                labels = list(node.labels) if hasattr(node, "labels") else []
+                
+                node_id = props.get("id") or props.get("name")
+                if not node_id:
+                    node_id = getattr(node, "element_id", None) or str(getattr(node, "id", hash(str(node))))
                 
                 if node_id not in nodes_dict:
                     nodes_dict[node_id] = Node(
@@ -80,21 +80,21 @@ async def query_graph(
                 target_node = record.get("m")
                 
                 if source_node and target_node:
-                    # Get source ID
-                    if hasattr(source_node, "id"):
-                        source_id = source_node.get("id") or source_node.get("name") or str(source_node.id)
-                    else:
-                        source_id = source_node.get("id") or source_node.get("name") or str(hash(str(source_node)))
+                    # Get source ID (from properties first, fallback to element_id)
+                    source_props = dict(source_node) if hasattr(source_node, "__getitem__") else {}
+                    source_id = source_props.get("id") or source_props.get("name")
+                    if not source_id:
+                        source_id = getattr(source_node, "element_id", None) or str(getattr(source_node, "id", hash(str(source_node))))
                     
                     # Get target ID
-                    if hasattr(target_node, "id"):
-                        target_id = target_node.get("id") or target_node.get("name") or str(target_node.id)
-                    else:
-                        target_id = target_node.get("id") or target_node.get("name") or str(hash(str(target_node)))
+                    target_props = dict(target_node) if hasattr(target_node, "__getitem__") else {}
+                    target_id = target_props.get("id") or target_props.get("name")
+                    if not target_id:
+                        target_id = getattr(target_node, "element_id", None) or str(getattr(target_node, "id", hash(str(target_node))))
                     
                     if source_id and target_id:
                         rel_type = rel.type if hasattr(rel, "type") else str(rel)
-                        rel_props = dict(rel) if hasattr(rel, "__dict__") else {}
+                        rel_props = dict(rel) if hasattr(rel, "__getitem__") else {}
                         
                         edges.append(Edge(
                             source=str(source_id),
@@ -129,14 +129,12 @@ async def get_nodes(
     nodes = []
     for record in results:
         node = record["n"]
-        if hasattr(node, "id"):
-            node_id = node.get("id") or node.get("name") or str(node.id)
-            labels = list(node.labels) if hasattr(node, "labels") else []
-            props = dict(node)
-        else:
-            node_id = node.get("id") or node.get("name") or str(hash(str(node)))
-            labels = node.get("labels", [])
-            props = node if isinstance(node, dict) else {}
+        props = dict(node) if hasattr(node, "__getitem__") else {}
+        labels = list(node.labels) if hasattr(node, "labels") else []
+        
+        node_id = props.get("id") or props.get("name")
+        if not node_id:
+            node_id = getattr(node, "element_id", None) or str(getattr(node, "id", hash(str(node))))
         
         nodes.append(Node(
             id=str(node_id),
@@ -166,19 +164,21 @@ async def get_edges(
         target_node = record["b"]
         rel = record["r"]
         
-        if hasattr(source_node, "id"):
-            source_id = source_node.get("id") or source_node.get("name") or str(source_node.id)
-        else:
-            source_id = source_node.get("id") or source_node.get("name") or str(hash(str(source_node)))
+        # Get source ID
+        source_props = dict(source_node) if hasattr(source_node, "__getitem__") else {}
+        source_id = source_props.get("id") or source_props.get("name")
+        if not source_id:
+            source_id = getattr(source_node, "element_id", None) or str(getattr(source_node, "id", hash(str(source_node))))
         
-        if hasattr(target_node, "id"):
-            target_id = target_node.get("id") or target_node.get("name") or str(target_node.id)
-        else:
-            target_id = target_node.get("id") or target_node.get("name") or str(hash(str(target_node)))
+        # Get target ID
+        target_props = dict(target_node) if hasattr(target_node, "__getitem__") else {}
+        target_id = target_props.get("id") or target_props.get("name")
+        if not target_id:
+            target_id = getattr(target_node, "element_id", None) or str(getattr(target_node, "id", hash(str(target_node))))
         
         if source_id and target_id:
             rel_type_str = rel.type if hasattr(rel, "type") else str(rel)
-            rel_props = dict(rel) if hasattr(rel, "__dict__") else {}
+            rel_props = dict(rel) if hasattr(rel, "__getitem__") else {}
             
             edges.append(Edge(
                 source=str(source_id),
@@ -232,39 +232,61 @@ async def get_document_graph(
         # Add document node
         if "d" in record and record["d"]:
             doc_node = record["d"]
-            doc_id_val = doc_node.get("id") or str(hash(str(doc_node)))
+            doc_props = dict(doc_node) if hasattr(doc_node, "__getitem__") else {}
+            doc_labels = list(doc_node.labels) if hasattr(doc_node, "labels") else ["Document"]
+            
+            doc_id_val = doc_props.get("id")
+            if not doc_id_val:
+                doc_id_val = getattr(doc_node, "element_id", None) or str(getattr(doc_node, "id", hash(str(doc_node))))
+            
             if doc_id_val not in nodes_dict:
                 nodes_dict[doc_id_val] = Node(
                     id=str(doc_id_val),
-                    labels=["Document"],
-                    properties=dict(doc_node)
+                    labels=doc_labels,
+                    properties=doc_props
                 )
         
         # Add related node
         if "n" in record and record["n"]:
             node = record["n"]
-            node_id = node.get("id") or node.get("name") or str(hash(str(node)))
+            props = dict(node) if hasattr(node, "__getitem__") else {}
+            labels = list(node.labels) if hasattr(node, "labels") else ["Concept"]
+            
+            node_id = props.get("id") or props.get("name")
+            if not node_id:
+                node_id = getattr(node, "element_id", None) or str(getattr(node, "id", hash(str(node))))
+            
             if node_id not in nodes_dict:
-                labels = list(node.labels) if hasattr(node, "labels") else ["Concept"]
                 nodes_dict[node_id] = Node(
                     id=str(node_id),
                     labels=labels,
-                    properties=dict(node)
+                    properties=props
                 )
         
         # Add relationships
         if "rels" in record and record["rels"]:
             for rel in record["rels"]:
                 if hasattr(rel, "start_node") and hasattr(rel, "end_node"):
-                    source_id = rel.start_node.get("id") or rel.start_node.get("name")
-                    target_id = rel.end_node.get("id") or rel.end_node.get("name")
+                    # Get source ID
+                    start_props = dict(rel.start_node) if hasattr(rel.start_node, "__getitem__") else {}
+                    source_id = start_props.get("id") or start_props.get("name")
+                    if not source_id:
+                        source_id = getattr(rel.start_node, "element_id", None) or str(getattr(rel.start_node, "id", hash(str(rel.start_node))))
+                    
+                    # Get target ID
+                    end_props = dict(rel.end_node) if hasattr(rel.end_node, "__getitem__") else {}
+                    target_id = end_props.get("id") or end_props.get("name")
+                    if not target_id:
+                        target_id = getattr(rel.end_node, "element_id", None) or str(getattr(rel.end_node, "id", hash(str(rel.end_node))))
+                    
                     rel_type = rel.type if hasattr(rel, "type") else "RELATES_TO"
+                    rel_props = dict(rel) if hasattr(rel, "__getitem__") else {}
                     
                     edges.append(Edge(
                         source=str(source_id),
                         target=str(target_id),
                         type=rel_type,
-                        properties=dict(rel) if hasattr(rel, "__dict__") else {}
+                        properties=rel_props
                     ))
     
     return GraphResponse(
@@ -316,39 +338,61 @@ async def get_concept_graph(
         # Add central concept node
         if "c" in record and record["c"]:
             concept_node = record["c"]
-            concept_id = concept_node.get("name") or str(hash(str(concept_node)))
+            concept_props = dict(concept_node) if hasattr(concept_node, "__getitem__") else {}
+            concept_labels = list(concept_node.labels) if hasattr(concept_node, "labels") else ["Concept"]
+            
+            concept_id = concept_props.get("name") or concept_props.get("id")
+            if not concept_id:
+                concept_id = getattr(concept_node, "element_id", None) or str(getattr(concept_node, "id", hash(str(concept_node))))
+            
             if concept_id not in nodes_dict:
                 nodes_dict[concept_id] = Node(
                     id=str(concept_id),
-                    labels=["Concept"],
-                    properties=dict(concept_node)
+                    labels=concept_labels,
+                    properties=concept_props
                 )
         
         # Add related node
         if "n" in record and record["n"]:
             node = record["n"]
-            node_id = node.get("id") or node.get("name") or str(hash(str(node)))
+            props = dict(node) if hasattr(node, "__getitem__") else {}
+            labels = list(node.labels) if hasattr(node, "labels") else []
+            
+            node_id = props.get("id") or props.get("name")
+            if not node_id:
+                node_id = getattr(node, "element_id", None) or str(getattr(node, "id", hash(str(node))))
+            
             if node_id not in nodes_dict:
-                labels = list(node.labels) if hasattr(node, "labels") else []
                 nodes_dict[node_id] = Node(
                     id=str(node_id),
                     labels=labels,
-                    properties=dict(node)
+                    properties=props
                 )
         
         # Add relationships
         if "rels" in record and record["rels"]:
             for rel in record["rels"]:
                 if hasattr(rel, "start_node") and hasattr(rel, "end_node"):
-                    source_id = rel.start_node.get("id") or rel.start_node.get("name")
-                    target_id = rel.end_node.get("id") or rel.end_node.get("name")
+                    # Get source ID
+                    start_props = dict(rel.start_node) if hasattr(rel.start_node, "__getitem__") else {}
+                    source_id = start_props.get("id") or start_props.get("name")
+                    if not source_id:
+                        source_id = getattr(rel.start_node, "element_id", None) or str(getattr(rel.start_node, "id", hash(str(rel.start_node))))
+                    
+                    # Get target ID
+                    end_props = dict(rel.end_node) if hasattr(rel.end_node, "__getitem__") else {}
+                    target_id = end_props.get("id") or end_props.get("name")
+                    if not target_id:
+                        target_id = getattr(rel.end_node, "element_id", None) or str(getattr(rel.end_node, "id", hash(str(rel.end_node))))
+                    
                     rel_type = rel.type if hasattr(rel, "type") else "RELATES_TO"
+                    rel_props = dict(rel) if hasattr(rel, "__getitem__") else {}
                     
                     edges.append(Edge(
                         source=str(source_id),
                         target=str(target_id),
                         type=rel_type,
-                        properties=dict(rel) if hasattr(rel, "__dict__") else {}
+                        properties=rel_props
                     ))
     
     return GraphResponse(

@@ -234,59 +234,29 @@ const loadGraph = async () => {
 
     let nodes = []
     let edges = []
-    const nodeMap = new Map()
 
-    // Handle different response formats
+    // Backend returns GraphResponse format: { nodes: [], edges: [], stats: {} }
     if (result.nodes && result.edges) {
-      nodes = result.nodes
-      edges = result.edges
-    } else if (Array.isArray(result)) {
-      result.forEach(item => {
-        if (item.n) {
-          const nodeId = item.n.id || item.n.properties?.id || String(item.n)
-          if (nodeId && !nodeMap.has(nodeId)) {
-            nodeMap.set(nodeId, true)
-            const props = typeof item.n === 'object' ? item.n.properties || item.n : {}
-            nodes.push({
-              data: {
-                id: String(nodeId),
-                label: props.name || props.filename || String(nodeId),
-                ...props
-              },
-              classes: (item.n.labels || []).join(' ') || ''
-            })
-          }
+      // Transform backend Node format to Cytoscape format
+      nodes = result.nodes.map(node => ({
+        data: {
+          id: node.id,
+          label: node.properties.name || node.properties.filename || node.id,
+          ...node.properties
+        },
+        classes: node.labels.join(' ')
+      }))
+      
+      // Transform backend Edge format to Cytoscape format
+      edges = result.edges.map(edge => ({
+        data: {
+          id: edge.id || `${edge.source}-${edge.target}-${edge.type}`,
+          source: edge.source,
+          target: edge.target,
+          label: edge.type,
+          ...edge.properties
         }
-        if (item.m) {
-          const nodeId = item.m.id || item.m.properties?.id || String(item.m)
-          if (nodeId && !nodeMap.has(nodeId)) {
-            nodeMap.set(nodeId, true)
-            const props = typeof item.m === 'object' ? item.m.properties || item.m : {}
-            nodes.push({
-              data: {
-                id: String(nodeId),
-                label: props.name || props.filename || String(nodeId),
-                ...props
-              },
-              classes: (item.m.labels || []).join(' ') || ''
-            })
-          }
-        }
-        if (item.r && item.a && item.b) {
-          const source = item.a.id || item.a.properties?.id || String(item.a)
-          const target = item.b.id || item.b.properties?.id || String(item.b)
-          if (source && target) {
-            edges.push({
-              data: {
-                id: `${source}-${target}-${item.r.type || 'RELATED'}`,
-                source: String(source),
-                target: String(target),
-                label: item.r.type || 'RELATED'
-              }
-            })
-          }
-        }
-      })
+      }))
     }
 
     graphData.value = { nodes, edges }
