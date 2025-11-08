@@ -3,7 +3,7 @@ import json
 from typing import List, Dict, Any, Optional
 from infra.config import settings
 from infra.ai_providers import AIProviderFactory, BaseAIClient
-from models.graph import TextChunk, Triplet
+from models.document import Chunk, Triplet
 
 
 class AISegmenter:
@@ -99,7 +99,7 @@ class AISegmenter:
     
     def analyze_document_structure(
         self, 
-        chunks: List[TextChunk],
+        chunks: List[Chunk],
         user_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -158,7 +158,7 @@ class AISegmenter:
     
     def extract_rich_knowledge(
         self,
-        chunk: TextChunk,
+        chunk: Chunk,
         document_context: Dict[str, Any],
         user_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
