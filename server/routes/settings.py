@@ -103,16 +103,19 @@ def write_env_file(env_vars):
 @router.get("/")
 async def get_settings():
     """Get current settings."""
+    # Read from .env file directly to get the latest values
+    env_vars = read_env_file()
+    
     return {
-        "ai_provider": settings.ai_provider,
-        "openai_api_key": "***" if settings.openai_api_key else None,
-        "openai_model": settings.openai_model,
-        "openai_base_url": settings.openai_base_url,
-        "ollama_base_url": settings.ollama_base_url,
-        "ollama_model": settings.ollama_model,
-        "neo4j_uri": settings.neo4j_uri,
-        "neo4j_user": settings.neo4j_user,
-        "redis_url": settings.redis_url,
+        "ai_provider": env_vars.get("AI_PROVIDER", settings.ai_provider),
+        "openai_api_key": "***" if env_vars.get("OPENAI_API_KEY") else None,
+        "openai_model": env_vars.get("OPENAI_MODEL", settings.openai_model),
+        "openai_base_url": env_vars.get("OPENAI_BASE_URL", settings.openai_base_url),
+        "ollama_base_url": env_vars.get("OLLAMA_BASE_URL", settings.ollama_base_url),
+        "ollama_model": env_vars.get("OLLAMA_MODEL", settings.ollama_model),
+        "neo4j_uri": env_vars.get("NEO4J_URI", settings.neo4j_uri),
+        "neo4j_user": env_vars.get("NEO4J_USER", settings.neo4j_user),
+        "redis_url": env_vars.get("REDIS_URL", settings.redis_url),
     }
 
 

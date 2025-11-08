@@ -236,6 +236,15 @@ const loadSettings = async () => {
       if (formData.value.openai_api_key === '***') {
         formData.value.openai_api_key = ''
       }
+      
+      // If provider is ollama, automatically fetch models and ensure saved model is in list
+      if (formData.value.ai_provider === 'ollama') {
+        await fetchOllamaModels(true) // silent mode (no success message)
+        // Ensure saved model is in the options list
+        if (formData.value.ollama_model && !ollamaModels.value.includes(formData.value.ollama_model)) {
+          ollamaModels.value.push(formData.value.ollama_model)
+        }
+      }
     }
   } catch (error) {
     message.error(t('settings.load_failed'))
@@ -244,18 +253,31 @@ const loadSettings = async () => {
 }
 
 // Fetch Ollama models
-const fetchOllamaModels = async () => {
+const fetchOllamaModels = async (silent = false) => {
   loadingModels.value = true
   try {
     const response = await getOllamaModels()
     if (response.success) {
+      const savedModel = formData.value.ollama_model
       ollamaModels.value = response.models
-      message.success(t('settings.models_loaded', { count: ollamaModels.value.length }))
+      
+      // Ensure saved model is in the list even if not returned from API
+      if (savedModel && !ollamaModels.value.includes(savedModel)) {
+        ollamaModels.value.push(savedModel)
+      }
+      
+      if (!silent) {
+        message.success(t('settings.models_loaded', { count: ollamaModels.value.length }))
+      }
     } else {
-      message.warning(response.message)
+      if (!silent) {
+        message.warning(response.message)
+      }
     }
   } catch (error) {
-    message.error(t('settings.fetch_models_failed'))
+    if (!silent) {
+      message.error(t('settings.fetch_models_failed'))
+    }
     console.error('Failed to fetch Ollama models:', error)
   } finally {
     loadingModels.value = false
@@ -312,6 +334,8 @@ const saveSettings = async () => {
 
     if (response.success) {
       message.success(response.message)
+      // Reload settings to ensure form displays the saved values from backend
+      await loadSettings()
     } else {
       message.error(response.message || t('settings.save_failed'))
     }
