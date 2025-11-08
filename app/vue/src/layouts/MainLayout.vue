@@ -105,6 +105,10 @@ const menuOptions = computed(() => [
     key: '/knowledge'
   },
   {
+    label: t('navigation.knowledge_card'),
+    key: '/knowledge-card'
+  },
+  {
     label: t('navigation.graph_visualization'),
     key: '/graph'
   },

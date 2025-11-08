@@ -19,6 +19,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'knowledge.title' }
       },
       {
+        path: 'knowledge-card',
+        name: 'KnowledgeCard',
+        component: () => import('@/views/KnowledgeCard.vue'),
+        meta: { title: 'knowledge_card.title' }
+      },
+      {
         path: 'graph',
         name: 'Graph',
         component: () => import('@/views/Graph.vue'),
