@@ -547,6 +547,15 @@ const progress = computed(() => currentTask.value?.progress || 0)
 const progressMessage = computed(() => currentTask.value?.message || '')
 const processStats = computed(() => currentTask.value?.stats)
 
+// Watch for task cancellation to reset upload component state
+watch(currentTask, (task) => {
+  if (task && task.status === 'cancelled') {
+    // Reset upload component state when task is cancelled
+    uploading.value = false
+    resetState()
+  }
+}, { immediate: false })
+
 const formatFileSize = (bytes) => {
   if (bytes === 0) return '0 Bytes'
   const k = 1024
