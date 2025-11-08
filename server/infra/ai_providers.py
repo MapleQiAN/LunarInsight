@@ -175,6 +175,12 @@ class OpenAICompatibleClient(BaseAIClient):
         # 规范化 base_url：移除末尾斜杠（除非是 Google 的特殊情况）
         normalized_base_url = base_url.rstrip('/') if not base_url.endswith('/openai/') else base_url
         
+        # 特殊处理：Ollama 需要 /v1 后缀
+        # 如果 base_url 是 localhost:11434 且没有 /v1，自动添加
+        if ':11434' in normalized_base_url and not normalized_base_url.endswith('/v1'):
+            normalized_base_url = normalized_base_url + '/v1'
+            print(f"⚠️  [AI客户端] 检测到 Ollama base_url，已自动添加 /v1 后缀")
+        
         # 验证 base_url 格式
         if not normalized_base_url.startswith(('http://', 'https://')):
             raise ValueError(f"Invalid base_url format: {base_url}. Must start with http:// or https://")
