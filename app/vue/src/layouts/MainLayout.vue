@@ -97,8 +97,8 @@ const menuOptions = computed(() => [
     key: '/'
   },
   {
-    label: t('navigation.upload'),
-    key: '/upload'
+    label: t('navigation.knowledge_build'),
+    key: '/knowledge'
   },
   {
     label: t('navigation.graph_visualization'),

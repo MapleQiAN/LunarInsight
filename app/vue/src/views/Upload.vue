@@ -8,7 +8,7 @@
             {{ t('upload.title') }}
           </n-gradient-text>
         </h1>
-        <p class="upload-subtitle">支持 PDF、Markdown 等多种格式文档</p>
+        <p class="upload-subtitle">{{ t('upload.supported_formats') }}</p>
       </div>
     </div>
 
@@ -20,7 +20,7 @@
           :default-upload="false"
           @change="handleFileChange"
           :show-file-list="false"
-          accept=".pdf,.md,.markdown"
+          accept=".pdf,.md,.markdown,.txt,.doc,.docx"
         >
           <n-upload-dragger class="enhanced-dragger">
             <div class="dragger-content">
@@ -31,11 +31,12 @@
               </div>
               <div class="dragger-text">
                 <h3>{{ t('upload.choose_file') }}</h3>
-                <p>点击或拖拽文件到此区域上传</p>
+                <p>{{ t('upload.drag_hint') }}</p>
                 <div class="dragger-formats">
                   <n-tag round size="small" type="info">PDF</n-tag>
                   <n-tag round size="small" type="success">Markdown</n-tag>
                   <n-tag round size="small" type="warning">TXT</n-tag>
+                  <n-tag round size="small" type="primary">Word</n-tag>
                 </div>
               </div>
             </div>
@@ -88,7 +89,7 @@
             </div>
             <div class="success-content">
               <h2>{{ t('upload.upload_success') }}</h2>
-              <p>文档已成功上传，准备开始处理</p>
+              <p>{{ t('upload.upload_success_desc') }}</p>
             </div>
           </div>
 
@@ -126,7 +127,7 @@
             </div>
             <div class="ingestion-content">
               <h2>{{ t('upload.ingestion_started') }}</h2>
-              <p>处理任务已启动，正在分析文档内容</p>
+              <p>{{ t('upload.ingestion_started_desc') }}</p>
             </div>
           </div>
 
@@ -161,7 +162,7 @@
               <template #icon>
                 <n-icon><add-circle-outline /></n-icon>
               </template>
-              上传新文档
+              {{ t('upload.upload_new') }}
             </n-button>
           </n-space>
         </n-card>
@@ -211,12 +212,49 @@ const getFileType = (filename) => {
   return ext
 }
 
+// 允许的文件类型
+const ALLOWED_EXTENSIONS = ['.pdf', '.md', '.markdown', '.txt', '.doc', '.docx']
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'text/markdown',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+]
+
+// 验证文件类型
+const validateFileType = (file) => {
+  const fileName = file.name.toLowerCase()
+  const fileExt = '.' + fileName.split('.').pop()
+  
+  // 检查扩展名
+  if (!ALLOWED_EXTENSIONS.includes(fileExt)) {
+    return false
+  }
+  
+  // 检查 MIME 类型（如果可用）
+  if (file.type && !ALLOWED_MIME_TYPES.includes(file.type)) {
+    // 对于某些情况，浏览器可能不识别 .md 文件的 MIME 类型
+    if (!(fileExt === '.md' || fileExt === '.markdown')) {
+      return false
+    }
+  }
+  
+  return true
+}
+
 const handleFileChange = ({ file, fileList }) => {
   if (file) {
+    // 验证文件类型
+    if (!validateFileType(file.file)) {
+      message.error(t('upload.invalid_file_type'))
+      return
+    }
+    
     selectedFile.value = file.file
     uploadResult.value = null
     ingestionResult.value = null
-    message.success(`已选择文件: ${file.file.name}`)
+    message.success(t('upload.file_selected', { name: file.file.name }))
   }
 }
 

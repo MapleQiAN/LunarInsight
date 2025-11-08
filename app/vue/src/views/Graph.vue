@@ -149,8 +149,8 @@
               <n-icon size="80" :component="GitNetworkOutline" style="opacity: 0.3" />
             </template>
             <template #extra>
-              <n-button type="primary" @click="$router.push('/upload')">
-                上传文档开始
+              <n-button type="primary" @click="$router.push('/knowledge')">
+                去构建知识
               </n-button>
             </template>
           </n-empty>
