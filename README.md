@@ -20,7 +20,7 @@
 ### 2) Key Features
 - **Evidence‑bound graph**: each triple carries `evidence` + `source_id` + `offset`.
 - **Clean separation**: Extension = capture; Backend = extraction/linking; Frontend = visualization & QA via API.
-- **Two tracks**: Streamlit MVP → Next.js + Cytoscape.js product UI.
+- **Two tracks**: Streamlit MVP → Vue 3 + Element Plus + Cytoscape.js product UI.
 - **Privacy by default**: minimal capture, local‑first, JWT + RBAC, export read‑only subgraphs.
 
 ### 3) Architecture
@@ -40,7 +40,7 @@ flowchart LR
     B --- API3[/plan/]
   end
 
-  FE[Frontend<br/>Next.js/Streamlit] <-->|HTTP| API1
+  FE[Frontend<br/>Vue 3/Streamlit] <-->|HTTP| API1
   FE <-->|HTTP| API2
   FE <-->|HTTP| API3
 ```
@@ -53,7 +53,7 @@ flowchart LR
 - **Echo (悟听)**: capture extension (MV3, IndexedDB queue)
 
 ### 5) Tech Stack
-- **Frontend**: Next.js, Cytoscape.js, Tailwind (MVP alt: Streamlit)
+- **Frontend**: Vue 3, Vite, Element Plus, Cytoscape.js, ECharts (MVP alt: Streamlit)
 - **Backend**: FastAPI, RQ/Celery, pydantic
 - **Graph**: Neo4j 5.x (Bolt)
 - **Vector**: pgvector or FAISS
@@ -113,7 +113,7 @@ Minimal capture (no forms/cookies), local‑first, TLS, encrypted backups, JWT +
 1) `/ingest` + extension queue + Neo4j write + Graph MVP  
 2) JSONL extraction, alias‑merge, preset queries, Ask v1  
 3) Plan + evaluation panel + conflict adjudication + Sources health  
-4) Next.js polish, RAG tuning, read‑only subgraph export, CI/CD
+4) Vue 3 polish, RAG tuning, read‑only subgraph export, CI/CD
 
 ---
 
@@ -164,7 +164,7 @@ flowchart LR
 - **月悟·听（Echo）**：采集扩展（MV3，IndexedDB 队列）  
 
 ### 5）技术栈
-前端 Next.js + Cytoscape.js；后端 FastAPI + RQ/Celery；图 Neo4j；向量 pgvector/FAISS；队列 Redis；可观测性 OpenTelemetry/Prometheus。
+前端 Vue 3 + Vite + Element Plus + Cytoscape.js + ECharts；后端 FastAPI + RQ/Celery；图 Neo4j；向量 pgvector/FAISS；队列 Redis；可观测性 OpenTelemetry/Prometheus。
 
 ### 6）快速开始（Docker，开发）
 > 同上方 English 的 `docker-compose` 示例。
@@ -189,7 +189,7 @@ flowchart LR
 1）打通 `/ingest`、扩展上报、Neo4j 入库、Graph MVP  
 2）三元组抽取、别名合并、预设查询、Ask v1  
 3）Plan + 评测面板 + 冲突裁决 + Sources 健康页  
-4）Next.js 产品化、RAG 优化、只读子图导出、CI/CD
+4）Vue 3 产品化、RAG 优化、只读子图导出、CI/CD
 
 ---
 

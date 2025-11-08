@@ -60,15 +60,16 @@ services:
 
   frontend:
     build:
-      context: ./app/streamlit
+      context: ./app/vue
       dockerfile: Dockerfile
     container_name: lunarinsight-frontend
     environment:
-      - API_BASE=http://api:8000
+      - VITE_API_BASE=http://api:8000
     ports:
-      - "8788:8501"
+      - "8788:80"
     depends_on:
       - api
     volumes:
-      - ./app/streamlit:/app
+      - ./app/vue:/app
+      - /app/node_modules
 
