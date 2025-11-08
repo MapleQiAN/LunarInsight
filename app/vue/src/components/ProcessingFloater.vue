@@ -52,16 +52,29 @@
                       />
                       <span class="task-filename" :title="task.filename">{{ task.filename }}</span>
                     </div>
-                    <n-button 
-                      v-if="task.status !== 'processing'"
-                      text 
-                      size="tiny" 
-                      @click="processingStore.removeTask(task.jobId)"
-                    >
-                      <template #icon>
-                        <n-icon :component="CloseOutline" />
-                      </template>
-                    </n-button>
+                    <div class="task-actions">
+                      <n-button 
+                        v-if="task.status === 'processing'"
+                        text 
+                        size="tiny"
+                        type="error"
+                        @click="handleCancelTask(task.jobId)"
+                      >
+                        <template #icon>
+                          <n-icon :component="StopCircleOutline" />
+                        </template>
+                      </n-button>
+                      <n-button 
+                        v-if="task.status !== 'processing'"
+                        text 
+                        size="tiny" 
+                        @click="processingStore.removeTask(task.jobId)"
+                      >
+                        <template #icon>
+                          <n-icon :component="CloseOutline" />
+                        </template>
+                      </n-button>
+                    </div>
                   </div>
 
                   <!-- Progress Bar (processing only) -->
@@ -164,7 +177,8 @@ import {
   CheckmarkCircleOutline,
   AlertCircleOutline,
   TimeOutline,
-  SparklesOutline
+  SparklesOutline,
+  StopCircleOutline
 } from '@vicons/ionicons5'
 
 const router = useRouter()
@@ -177,6 +191,8 @@ const getStatusIcon = (status: string) => {
       return CheckmarkCircleOutline
     case 'failed':
       return AlertCircleOutline
+    case 'cancelled':
+      return StopCircleOutline
     default:
       return TimeOutline
   }
@@ -188,8 +204,19 @@ const getStatusMessage = (status: string) => {
       return '处理完成'
     case 'failed':
       return '处理失败'
+    case 'cancelled':
+      return '任务已取消'
     default:
       return '处理中'
+  }
+}
+
+const handleCancelTask = async (jobId: string) => {
+  const success = await processingStore.cancelTask(jobId)
+  if (success) {
+    message.success('任务已取消')
+  } else {
+    message.error('取消任务失败')
   }
 }
 
@@ -333,6 +360,11 @@ const formatNumber = (num: number | undefined) => {
           background: rgba(208, 48, 80, 0.05);
         }
 
+        &.cancelled {
+          border-color: rgba(100, 116, 139, 0.2);
+          background: rgba(100, 116, 139, 0.05);
+        }
+
         .task-header {
           display: flex;
           align-items: center;
@@ -360,6 +392,16 @@ const formatNumber = (num: number | undefined) => {
               &.failed {
                 color: #d03050;
               }
+
+              &.cancelled {
+                color: #64748b;
+              }
+            }
+
+            .task-actions {
+              display: flex;
+              align-items: center;
+              gap: 4px;
             }
 
             .task-filename {

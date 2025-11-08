@@ -2,12 +2,13 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getJobStatus } from '@/api/services'
 import type { JobStatus } from '@/api/services'
+import { cancelJob } from '@/api/index'
 
 export interface ProcessingTask {
   jobId: string
   documentId: string
   filename: string
-  status: 'processing' | 'completed' | 'failed'
+  status: 'processing' | 'completed' | 'failed' | 'cancelled'
   progress: number
   message: string
   stats?: {
@@ -101,11 +102,33 @@ export const useProcessingStore = defineStore('processing', () => {
   const clearFinishedTasks = () => {
     const toRemove: string[] = []
     tasks.value.forEach((task, jobId) => {
-      if (task.status === 'completed' || task.status === 'failed') {
+      if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
         toRemove.push(jobId)
       }
     })
     toRemove.forEach(jobId => removeTask(jobId))
+  }
+
+  // 取消任务
+  const cancelTask = async (jobId: string) => {
+    try {
+      await cancelJob(jobId)
+      
+      // 更新本地任务状态
+      const task = tasks.value.get(jobId)
+      if (task) {
+        updateTask(jobId, {
+          status: 'cancelled',
+          message: '任务已取消'
+        })
+        stopPolling(jobId)
+      }
+      
+      return true
+    } catch (error) {
+      console.error(`Failed to cancel job ${jobId}:`, error)
+      return false
+    }
   }
 
   // 开始轮询任务状态
@@ -141,6 +164,12 @@ export const useProcessingStore = defineStore('processing', () => {
           updateTask(jobId, { 
             status: 'failed',
             message: status.error || status.message || '处理失败'
+          })
+          stopPolling(jobId)
+        } else if (status.status === 'cancelled') {
+          updateTask(jobId, { 
+            status: 'cancelled',
+            message: status.message || '任务已取消'
           })
           stopPolling(jobId)
         }
@@ -205,6 +234,7 @@ export const useProcessingStore = defineStore('processing', () => {
     updateTask,
     removeTask,
     clearFinishedTasks,
+    cancelTask,
     startPolling,
     stopPolling,
     stopAllPolling,

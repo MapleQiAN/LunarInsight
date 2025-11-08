@@ -105,7 +105,8 @@ class RedisQueue:
                 'finished': 'completed',
                 'failed': 'failed',
                 'deferred': 'queued',
-                'scheduled': 'queued'
+                'scheduled': 'queued',
+                'canceled': 'cancelled'
             }
             
             result = {
@@ -135,6 +136,43 @@ class RedisQueue:
                 "status": "not_found",
                 "error": str(e)
             }
+    
+    def cancel_job(self, job_id: str) -> bool:
+        """
+        Cancel a job.
+        
+        Args:
+            job_id: Job ID to cancel
+            
+        Returns:
+            True if job was cancelled, False otherwise
+        """
+        if not self._connected:
+            return False
+        
+        try:
+            job = Job.fetch(job_id, connection=self.redis_conn)
+            
+            # Check if job is still queued or processing
+            if job.get_status() in ['queued', 'started', 'deferred', 'scheduled']:
+                # Set cancel flag in metadata for running jobs
+                if job.get_status() == 'started':
+                    meta = job.meta or {}
+                    meta['_cancelled'] = True
+                    meta['status'] = 'cancelled'
+                    meta['message'] = '任务已被用户取消'
+                    job.meta = meta
+                    job.save()
+                
+                # Cancel the job
+                job.cancel()
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"⚠️  Failed to cancel job {job_id}: {e}")
+            return False
 
 
 # Global queue instance

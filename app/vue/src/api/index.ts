@@ -37,5 +37,10 @@ api.interceptors.response.use(
   }
 )
 
+// 取消任务
+export const cancelJob = (jobId: string) => {
+  return api.delete(`/ingest/cancel/${jobId}`)
+}
+
 export default api
 

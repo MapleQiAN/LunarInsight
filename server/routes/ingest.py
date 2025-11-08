@@ -33,6 +33,36 @@ queue = get_queue()
 jobs: Dict[str, Dict] = {}
 
 
+def _is_job_cancelled(job_id: str) -> bool:
+    """Check if job has been cancelled."""
+    # Try to check via RQ if available
+    if queue.is_connected():
+        try:
+            from rq import get_current_job
+            current_job = get_current_job()
+            if current_job:
+                # We're in a worker, check current job meta
+                meta = current_job.meta or {}
+                return meta.get('_cancelled', False)
+        except Exception:
+            pass
+        
+        # Not in worker context, try to fetch job by ID
+        try:
+            job = queue.get_job(job_id)
+            if job:
+                meta = job.meta or {}
+                return meta.get('_cancelled', False)
+        except Exception:
+            pass
+    
+    # Fallback to in-memory storage
+    if job_id in jobs:
+        return jobs[job_id].get("status") == "cancelled"
+    
+    return False
+
+
 def _update_status(job_id: str, status: str, progress: int, message: str, **kwargs):
     """Update job status (supports both Redis and fallback storage)."""
     # Try to update via RQ if we're in a worker context
@@ -109,11 +139,19 @@ def process_document(
     _update_status(job_id, "processing", 0, "Starting parsing...", documentId=doc_id)
     
     try:
+        # Check if cancelled
+        if _is_job_cancelled(job_id):
+            return
+        
         # Parse document
         _update_status(job_id, "processing", 10, "Parsing document...", documentId=doc_id)
         
         parser = ParserFactory.create_parser(kind, chunk_size=chunk_size)
         full_text, chunks = parser.parse(file_path)
+        
+        # Check if cancelled
+        if _is_job_cancelled(job_id):
+            return
         
         # AI智能分词模式
         if enable_ai_segmentation and ai_segmenter:
@@ -122,15 +160,27 @@ def process_document(
             if user_prompt:
                 _update_status(job_id, "processing", 15, "Optimizing prompt...", documentId=doc_id)
                 
+                # Check if cancelled
+                if _is_job_cancelled(job_id):
+                    return
+                
                 if optimize_prompt:
                     final_prompt = ai_segmenter.optimize_user_prompt(user_prompt)
                 else:
                     final_prompt = user_prompt
             
+            # Check if cancelled
+            if _is_job_cancelled(job_id):
+                return
+            
             # Analyze document structure
             _update_status(job_id, "processing", 20, "Analyzing document structure...", documentId=doc_id)
             
             doc_context = ai_segmenter.analyze_document_structure(chunks, final_prompt)
+            
+            # Check if cancelled
+            if _is_job_cancelled(job_id):
+                return
             
             # Extract rich knowledge from each chunk
             _update_status(job_id, "processing", 30, "Extracting rich knowledge...", documentId=doc_id)
@@ -140,6 +190,10 @@ def process_document(
             all_insights = []
             
             for i, chunk in enumerate(chunks, 1):
+                # Check if cancelled before processing each chunk
+                if _is_job_cancelled(job_id):
+                    return
+                
                 knowledge = ai_segmenter.extract_rich_knowledge(chunk, doc_context, final_prompt)
                 
                 all_triplets.extend(knowledge.get("triplets", []))
@@ -186,14 +240,26 @@ def process_document(
             
             all_triplets = []
             for i, chunk in enumerate(chunks):
+                # Check if cancelled before processing each chunk
+                if _is_job_cancelled(job_id):
+                    return
+                
                 triplets = extractor.extract(chunk)
                 all_triplets.extend(triplets)
                 progress = 30 + int((i + 1) / len(chunks) * 40)
                 _update_status(job_id, "processing", progress, f"Extracting triplets... ({i + 1}/{len(chunks)})", documentId=doc_id)
             
+            # Check if cancelled
+            if _is_job_cancelled(job_id):
+                return
+            
             _update_status(job_id, "processing", 70, f"Extracted {len(all_triplets)} triplets. Linking entities...", documentId=doc_id)
             
             linked_triplets = linker.link_and_merge(all_triplets)
+            
+            # Check if cancelled
+            if _is_job_cancelled(job_id):
+                return
             
             _update_status(job_id, "processing", 90, "Ingesting into graph...", documentId=doc_id)
             
@@ -347,4 +413,45 @@ async def get_ingest_status(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     
     return jobs[job_id]
+
+
+@router.delete("/cancel/{job_id}")
+async def cancel_ingest_job(job_id: str):
+    """
+    Cancel a running ingestion job.
+    
+    Args:
+        job_id: Job ID to cancel
+        
+    Returns:
+        Success message or error
+    """
+    # Try to cancel via RQ if available
+    if queue.is_connected():
+        success = queue.cancel_job(job_id)
+        if success:
+            return {"message": "Job cancelled successfully", "jobId": job_id}
+        else:
+            # Check if job exists
+            status = queue.get_job_status(job_id)
+            if status.get("status") == "not_found":
+                raise HTTPException(status_code=404, detail="Job not found")
+            else:
+                raise HTTPException(status_code=400, detail="Job cannot be cancelled (already completed or failed)")
+    
+    # Fallback: mark job as cancelled in in-memory storage
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    current_status = jobs[job_id].get("status")
+    if current_status in ["completed", "failed", "cancelled"]:
+        raise HTTPException(status_code=400, detail=f"Job cannot be cancelled (status: {current_status})")
+    
+    # Mark as cancelled
+    jobs[job_id].update({
+        "status": "cancelled",
+        "message": "任务已被用户取消"
+    })
+    
+    return {"message": "Job cancelled successfully", "jobId": job_id}
 
