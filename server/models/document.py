@@ -45,8 +45,16 @@ class Triplet(BaseModel):
     subject: str
     predicate: str
     object: str
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(ge=0.0, le=1.0, default=1.0)
     evidence: Dict[str, Any] = Field(default_factory=dict, description="Evidence: docId, chunkId, page, offset")
     doc_id: Optional[str] = None
     chunk_id: Optional[str] = None
+    context: Optional[str] = Field(None, description="Contextual information about the relationship")
+
+
+class AIExtractionRequest(BaseModel):
+    """AI extraction configuration."""
+    enable_ai_segmentation: bool = Field(False, description="Enable AI-powered intelligent segmentation")
+    user_prompt: Optional[str] = Field(None, description="User-defined analysis prompt")
+    optimize_prompt: bool = Field(True, description="Whether to optimize user prompt with AI")
 
