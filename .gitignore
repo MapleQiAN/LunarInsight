@@ -30,6 +30,7 @@ wheels/
 # IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
@@ -51,3 +52,6 @@ Thumbs.db
 # Docker
 .dockerignore
 
+LunarInsight_技术蓝图_v4.md
+QUICKSTART.md
+LunarInsight_技术蓝图_v3.md
