@@ -13,6 +13,8 @@ from services.parser import ParserFactory
 from services.extractor import TripletExtractor
 from services.linker import EntityLinker
 from services.graph_service import GraphService
+from services.ai_segmenter import AISegmenter
+from models.document import AIExtractionRequest
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
@@ -20,6 +22,13 @@ storage = Storage()
 extractor = TripletExtractor()
 linker = EntityLinker()
 graph_service = GraphService()
+
+# Initialize AI segmenter (optional, based on configured AI provider)
+try:
+    ai_segmenter = AISegmenter()
+except ValueError as e:
+    ai_segmenter = None
+    print(f"⚠️  AI segmentation disabled: {str(e)}")
 
 # Job storage for tracking processing status
 processing_jobs = {}
@@ -154,8 +163,29 @@ async def get_document(document_id: str):
     return doc_data
 
 
-def process_document_background(doc_id: str, file_path: str, kind: str, job_id: str):
-    """Background task for processing document into knowledge graph."""
+def process_document_background(
+    doc_id: str, 
+    file_path: str, 
+    kind: str, 
+    job_id: str, 
+    chunk_size: int = 2000,
+    enable_ai_segmentation: bool = False,
+    user_prompt: Optional[str] = None,
+    optimize_prompt: bool = True
+):
+    """
+    Background task for processing document into knowledge graph.
+    
+    Args:
+        doc_id: Document ID
+        file_path: Path to document file
+        kind: Document type
+        job_id: Job ID for tracking
+        chunk_size: Maximum characters per chunk (default: 2000)
+        enable_ai_segmentation: Enable AI-powered intelligent segmentation
+        user_prompt: User-defined analysis prompt
+        optimize_prompt: Whether to optimize user prompt with AI
+    """
     processing_jobs[job_id] = {
         "status": "processing",
         "documentId": doc_id,
@@ -170,74 +200,200 @@ def process_document_background(doc_id: str, file_path: str, kind: str, job_id: 
         print(f"   - 文件路径: {file_path}")
         print(f"   - 文件类型: {kind}")
         print(f"   - 任务ID: {job_id}")
+        print(f"   - Chunk大小: {chunk_size} 字符")
+        print(f"   - AI智能分词: {'启用' if enable_ai_segmentation else '禁用'}")
+        if user_prompt:
+            print(f"   - 用户Prompt: {user_prompt[:100]}...")
         print(f"{'#'*80}\n")
         
         # Step 1: Parse document
         processing_jobs[job_id]["message"] = "正在解析文档..."
         processing_jobs[job_id]["progress"] = 10
         
-        print(f"📖 [步骤1] 解析文档...")
-        parser = ParserFactory.create_parser(kind)
+        print(f"📖 [步骤1] 解析文档 (chunk_size={chunk_size})...")
+        parser = ParserFactory.create_parser(kind, chunk_size=chunk_size)
         full_text, chunks = parser.parse(file_path)
         print(f"✅ [步骤1] 解析完成: {len(chunks)} 个文本块，总长度 {len(full_text)} 字符")
+        if chunks:
+            avg_chunk_size = sum(len(c.text) for c in chunks) / len(chunks)
+            print(f"   - 平均每个文本块: {avg_chunk_size:.0f} 字符")
         
-        processing_jobs[job_id]["message"] = f"已提取 {len(chunks)} 个文本块，正在进行知识抽取..."
-        processing_jobs[job_id]["progress"] = 30
+        # AI智能分词模式
+        if enable_ai_segmentation and ai_segmenter:
+            print(f"\n🧠 [AI模式] 启用智能知识抽取")
+            
+            # Step 1.5: Optimize user prompt if provided
+            final_prompt = None
+            if user_prompt:
+                processing_jobs[job_id]["message"] = "正在优化分析提示词..."
+                processing_jobs[job_id]["progress"] = 15
+                
+                if optimize_prompt:
+                    print(f"🔧 [Prompt优化] 优化用户提示词...")
+                    final_prompt = ai_segmenter.optimize_user_prompt(user_prompt)
+                else:
+                    final_prompt = user_prompt
+                    print(f"📝 [Prompt] 使用原始用户提示词")
+            
+            # Step 2: Analyze document structure
+            processing_jobs[job_id]["message"] = "正在分析文档结构..."
+            processing_jobs[job_id]["progress"] = 20
+            
+            print(f"\n🔍 [文档分析] 分析文档整体结构...")
+            doc_context = ai_segmenter.analyze_document_structure(chunks, final_prompt)
+            print(f"✅ [文档分析] 完成:")
+            print(f"   - 主题: {', '.join(doc_context.get('themes', []))}")
+            print(f"   - 领域: {', '.join(doc_context.get('domains', []))}")
+            print(f"   - 关键概念: {', '.join(doc_context.get('key_concepts', [])[:5])}...")
+            
+            # Step 3: Extract rich knowledge from each chunk
+            processing_jobs[job_id]["message"] = "正在进行深度知识抽取..."
+            processing_jobs[job_id]["progress"] = 30
+            
+            print(f"\n💎 [深度抽取] 开始智能知识抽取 (共 {len(chunks)} 个文本块)...")
+            all_triplets = []
+            all_concepts = []
+            all_insights = []
+            
+            for i, chunk in enumerate(chunks, 1):
+                print(f"\n📦 [文本块 {i}/{len(chunks)}] AI深度分析中...")
+                knowledge = ai_segmenter.extract_rich_knowledge(chunk, doc_context, final_prompt)
+                
+                # 收集三元组
+                triplets = knowledge.get("triplets", [])
+                all_triplets.extend(triplets)
+                
+                # 收集丰富概念
+                concepts = knowledge.get("concepts", [])
+                all_concepts.extend(concepts)
+                
+                # 收集洞察
+                insights = knowledge.get("insights", [])
+                all_insights.extend(insights)
+                
+                print(f"   ✓ 提取: {len(triplets)} 个关系, {len(concepts)} 个概念, {len(insights)} 个洞察")
+                
+                processing_jobs[job_id]["progress"] = 30 + int((i / len(chunks)) * 40)
+                processing_jobs[job_id]["message"] = f"AI深度分析中... ({i}/{len(chunks)})"
+            
+            print(f"\n📊 [深度抽取] 完成:")
+            print(f"   - 总关系数: {len(all_triplets)}")
+            print(f"   - 总概念数: {len(all_concepts)}")
+            print(f"   - 总洞察数: {len(all_insights)}")
+            
+            # Step 4: Ingest rich concepts first
+            processing_jobs[job_id]["message"] = "正在构建丰富概念..."
+            processing_jobs[job_id]["progress"] = 75
+            
+            print(f"\n💎 [概念构建] 写入丰富概念信息...")
+            graph_service.ingest_rich_concepts(doc_id, all_concepts)
+            
+            # Step 5: Link and merge entities
+            processing_jobs[job_id]["message"] = "正在链接实体..."
+            processing_jobs[job_id]["progress"] = 80
+            
+            print(f"\n🔗 [实体链接] 开始实体链接和合并...")
+            linked_triplets = linker.link_and_merge(all_triplets)
+            print(f"✅ [实体链接] 完成: {len(linked_triplets)} 个三元组")
+            
+            # Step 6: Ingest triplets
+            processing_jobs[job_id]["message"] = "正在构建知识图谱..."
+            processing_jobs[job_id]["progress"] = 90
+            
+            print(f"\n💾 [图谱构建] 开始构建知识图谱...")
+            graph_service.ingest_triplets(doc_id, linked_triplets)
+            print(f"✅ [图谱构建] 完成")
+            
+            # Get statistics
+            concept_names = set(c["name"] for c in all_concepts)
+            
+            print(f"\n{'#'*80}")
+            print(f"🎉 [AI智能处理] 处理完成!")
+            print(f"   - 文本块数: {len(chunks)}")
+            print(f"   - 丰富概念数: {len(all_concepts)}")
+            print(f"   - 知识关系数: {len(linked_triplets)}")
+            print(f"   - 深度洞察数: {len(all_insights)}")
+            print(f"   - 文本总长度: {len(full_text)} 字符")
+            if all_insights:
+                print(f"\n💡 [关键洞察]:")
+                for insight in all_insights[:3]:
+                    print(f"   • {insight}")
+            print(f"{'#'*80}\n")
+            
+            processing_jobs[job_id]["status"] = "completed"
+            processing_jobs[job_id]["progress"] = 100
+            processing_jobs[job_id]["message"] = "AI智能分析完成！"
+            processing_jobs[job_id]["stats"] = {
+                "chunks": len(chunks),
+                "triplets": len(linked_triplets),
+                "concepts": len(concept_names),
+                "insights": len(all_insights),
+                "textLength": len(full_text),
+                "mode": "ai_segmentation"
+            }
+            if all_insights:
+                processing_jobs[job_id]["insights"] = all_insights[:10]  # 返回前10条洞察
         
-        # Step 2: Extract triplets using AI
-        print(f"\n🤖 [步骤2] 开始知识抽取 (共 {len(chunks)} 个文本块)...")
-        all_triplets = []
-        chunk_triplet_counts = []
-        
-        for i, chunk in enumerate(chunks, 1):
-            print(f"\n📦 [文本块 {i}/{len(chunks)}] 处理中...")
-            triplets = extractor.extract(chunk)
-            all_triplets.extend(triplets)
-            chunk_triplet_counts.append(len(triplets))
-            processing_jobs[job_id]["progress"] = 30 + int((i / len(chunks)) * 40)
-            processing_jobs[job_id]["message"] = f"正在抽取知识... ({i}/{len(chunks)})"
-        
-        print(f"\n📊 [步骤2] 知识抽取完成:")
-        print(f"   - 总三元组数: {len(all_triplets)}")
-        print(f"   - 各文本块三元组数: {chunk_triplet_counts}")
-        print(f"   - 平均每个文本块: {len(all_triplets) / len(chunks) if chunks else 0:.2f} 个三元组")
-        
-        processing_jobs[job_id]["message"] = f"已抽取 {len(all_triplets)} 个知识三元组，正在链接实体..."
-        processing_jobs[job_id]["progress"] = 70
-        
-        # Step 3: Link and merge entities
-        print(f"\n🔗 [步骤3] 开始实体链接和合并...")
-        linked_triplets = linker.link_and_merge(all_triplets)
-        print(f"✅ [步骤3] 实体链接完成: {len(linked_triplets)} 个三元组")
-        
-        processing_jobs[job_id]["message"] = "正在构建知识图谱..."
-        processing_jobs[job_id]["progress"] = 85
-        
-        # Step 4: Ingest into Neo4j
-        print(f"\n💾 [步骤4] 开始构建知识图谱...")
-        graph_service.ingest_triplets(doc_id, linked_triplets)
-        print(f"✅ [步骤4] 知识图谱构建完成")
-        
-        # Get graph statistics
-        concept_names = set(t.subject for t in linked_triplets) | set(t.object for t in linked_triplets)
-        
-        print(f"\n{'#'*80}")
-        print(f"🎉 [文档处理] 处理完成!")
-        print(f"   - 文本块数: {len(chunks)}")
-        print(f"   - 知识三元组数: {len(linked_triplets)}")
-        print(f"   - 概念数量: {len(concept_names)}")
-        print(f"   - 文本总长度: {len(full_text)} 字符")
-        print(f"{'#'*80}\n")
-        
-        processing_jobs[job_id]["status"] = "completed"
-        processing_jobs[job_id]["progress"] = 100
-        processing_jobs[job_id]["message"] = "知识图谱构建完成！"
-        processing_jobs[job_id]["stats"] = {
-            "chunks": len(chunks),
-            "triplets": len(linked_triplets),
-            "concepts": len(concept_names),
-            "textLength": len(full_text)
-        }
+        else:
+            # 传统模式
+            processing_jobs[job_id]["message"] = f"已提取 {len(chunks)} 个文本块，正在进行知识抽取..."
+            processing_jobs[job_id]["progress"] = 30
+            
+            # Step 2: Extract triplets using AI
+            print(f"\n🤖 [步骤2] 开始知识抽取 (共 {len(chunks)} 个文本块)...")
+            all_triplets = []
+            chunk_triplet_counts = []
+            
+            for i, chunk in enumerate(chunks, 1):
+                print(f"\n📦 [文本块 {i}/{len(chunks)}] 处理中...")
+                triplets = extractor.extract(chunk)
+                all_triplets.extend(triplets)
+                chunk_triplet_counts.append(len(triplets))
+                processing_jobs[job_id]["progress"] = 30 + int((i / len(chunks)) * 40)
+                processing_jobs[job_id]["message"] = f"正在抽取知识... ({i}/{len(chunks)})"
+            
+            print(f"\n📊 [步骤2] 知识抽取完成:")
+            print(f"   - 总三元组数: {len(all_triplets)}")
+            print(f"   - 各文本块三元组数: {chunk_triplet_counts}")
+            print(f"   - 平均每个文本块: {len(all_triplets) / len(chunks) if chunks else 0:.2f} 个三元组")
+            
+            processing_jobs[job_id]["message"] = f"已抽取 {len(all_triplets)} 个知识三元组，正在链接实体..."
+            processing_jobs[job_id]["progress"] = 70
+            
+            # Step 3: Link and merge entities
+            print(f"\n🔗 [步骤3] 开始实体链接和合并...")
+            linked_triplets = linker.link_and_merge(all_triplets)
+            print(f"✅ [步骤3] 实体链接完成: {len(linked_triplets)} 个三元组")
+            
+            processing_jobs[job_id]["message"] = "正在构建知识图谱..."
+            processing_jobs[job_id]["progress"] = 85
+            
+            # Step 4: Ingest into Neo4j
+            print(f"\n💾 [步骤4] 开始构建知识图谱...")
+            graph_service.ingest_triplets(doc_id, linked_triplets)
+            print(f"✅ [步骤4] 知识图谱构建完成")
+            
+            # Get graph statistics
+            concept_names = set(t.subject for t in linked_triplets) | set(t.object for t in linked_triplets)
+            
+            print(f"\n{'#'*80}")
+            print(f"🎉 [文档处理] 处理完成!")
+            print(f"   - 文本块数: {len(chunks)}")
+            print(f"   - 知识三元组数: {len(linked_triplets)}")
+            print(f"   - 概念数量: {len(concept_names)}")
+            print(f"   - 文本总长度: {len(full_text)} 字符")
+            print(f"{'#'*80}\n")
+            
+            processing_jobs[job_id]["status"] = "completed"
+            processing_jobs[job_id]["progress"] = 100
+            processing_jobs[job_id]["message"] = "知识图谱构建完成！"
+            processing_jobs[job_id]["stats"] = {
+                "chunks": len(chunks),
+                "triplets": len(linked_triplets),
+                "concepts": len(concept_names),
+                "textLength": len(full_text),
+                "mode": "traditional"
+            }
         
     except Exception as e:
         print(f"\n{'#'*80}")
@@ -258,7 +414,11 @@ def process_document_background(doc_id: str, file_path: str, kind: str, job_id: 
 async def upload_and_process(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    auto_process: bool = True
+    auto_process: bool = True,
+    chunk_size: int = 2000,
+    enable_ai_segmentation: bool = False,
+    user_prompt: Optional[str] = None,
+    optimize_prompt: bool = True
 ):
     """
     一体化接口：上传文件并自动进行知识抽取和图谱构建。
@@ -266,6 +426,10 @@ async def upload_and_process(
     Args:
         file: 上传的文件
         auto_process: 是否自动处理（默认 True）
+        chunk_size: 每个文本块的最大字符数（默认 2000，建议范围：1000-8000）
+        enable_ai_segmentation: 启用AI智能分词（默认 False）
+        user_prompt: 用户自定义分析提示词（可选）
+        optimize_prompt: 是否用AI优化用户提示词（默认 True）
         
     Returns:
         {
@@ -275,6 +439,18 @@ async def upload_and_process(
             "jobId": "..." (if auto_process=True)
         }
     """
+    # Validate chunk_size
+    if chunk_size < 100:
+        raise HTTPException(status_code=400, detail="chunk_size 不能小于 100 字符")
+    if chunk_size > 20000:
+        raise HTTPException(status_code=400, detail="chunk_size 不能大于 20000 字符（建议不超过 8000）")
+    
+    # Validate AI segmentation
+    if enable_ai_segmentation and not ai_segmenter:
+        raise HTTPException(
+            status_code=400, 
+            detail="AI智能分词需要配置 OPENAI_API_KEY 环境变量"
+        )
     # Read file content
     content = await file.read()
     
@@ -349,7 +525,11 @@ async def upload_and_process(
             doc_id,
             file_path,
             kind,
-            job_id
+            job_id,
+            chunk_size,
+            enable_ai_segmentation,
+            user_prompt,
+            optimize_prompt
         )
         
         response["status"] = "processing"
@@ -385,6 +565,10 @@ class TextUploadRequest(BaseModel):
     content: str
     title: Optional[str] = None
     auto_process: bool = True
+    chunk_size: int = 2000
+    enable_ai_segmentation: bool = False
+    user_prompt: Optional[str] = None
+    optimize_prompt: bool = True
 
 
 class URLUploadRequest(BaseModel):
@@ -392,6 +576,10 @@ class URLUploadRequest(BaseModel):
     url: str
     title: Optional[str] = None
     auto_process: bool = True
+    chunk_size: int = 2000
+    enable_ai_segmentation: bool = False
+    user_prompt: Optional[str] = None
+    optimize_prompt: bool = True
 
 
 @router.post("/text", response_model=dict)
@@ -406,6 +594,10 @@ async def upload_text(
         content: 文本内容
         title: 文档标题（可选，默认使用前30个字符）
         auto_process: 是否自动处理（默认 True）
+        chunk_size: 每个文本块的最大字符数（默认 2000）
+        enable_ai_segmentation: 启用AI智能分词（默认 False）
+        user_prompt: 用户自定义分析提示词（可选）
+        optimize_prompt: 是否用AI优化用户提示词（默认 True）
         
     Returns:
         {
@@ -415,6 +607,20 @@ async def upload_text(
             "jobId": "..." (if auto_process=True)
         }
     """
+    # Validate chunk_size
+    chunk_size = request.chunk_size
+    if chunk_size < 100:
+        raise HTTPException(status_code=400, detail="chunk_size 不能小于 100 字符")
+    if chunk_size > 20000:
+        raise HTTPException(status_code=400, detail="chunk_size 不能大于 20000 字符（建议不超过 8000）")
+    
+    # Validate AI segmentation
+    if request.enable_ai_segmentation and not ai_segmenter:
+        raise HTTPException(
+            status_code=400, 
+            detail="AI智能分词需要配置 OPENAI_API_KEY 环境变量"
+        )
+    
     content = request.content.strip()
     
     if not content:
@@ -483,7 +689,11 @@ async def upload_text(
             doc_id,
             file_path,
             "txt",
-            job_id
+            job_id,
+            chunk_size,
+            request.enable_ai_segmentation,
+            request.user_prompt,
+            request.optimize_prompt
         )
         
         response["status"] = "processing"
@@ -505,6 +715,10 @@ async def upload_url(
         url: 网页链接
         title: 文档标题（可选，默认使用URL）
         auto_process: 是否自动处理（默认 True）
+        chunk_size: 每个文本块的最大字符数（默认 2000）
+        enable_ai_segmentation: 启用AI智能分词（默认 False）
+        user_prompt: 用户自定义分析提示词（可选）
+        optimize_prompt: 是否用AI优化用户提示词（默认 True）
         
     Returns:
         {
@@ -514,6 +728,19 @@ async def upload_url(
             "jobId": "..." (if auto_process=True)
         }
     """
+    # Validate chunk_size
+    chunk_size = request.chunk_size
+    if chunk_size < 100:
+        raise HTTPException(status_code=400, detail="chunk_size 不能小于 100 字符")
+    if chunk_size > 20000:
+        raise HTTPException(status_code=400, detail="chunk_size 不能大于 20000 字符（建议不超过 8000）")
+    
+    # Validate AI segmentation
+    if request.enable_ai_segmentation and not ai_segmenter:
+        raise HTTPException(
+            status_code=400, 
+            detail="AI智能分词需要配置 OPENAI_API_KEY 环境变量"
+        )
     import httpx
     from bs4 import BeautifulSoup
     
@@ -633,7 +860,11 @@ async def upload_url(
             doc_id,
             file_path,
             "txt",
-            job_id
+            job_id,
+            chunk_size,
+            request.enable_ai_segmentation,
+            request.user_prompt,
+            request.optimize_prompt
         )
         
         response["status"] = "processing"
