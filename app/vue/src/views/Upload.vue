@@ -177,9 +177,9 @@
         </n-tabs>
       </n-card>
 
-      <!-- Processing Progress Card -->
+      <!-- Processing Progress Card (Optional local view) -->
       <transition name="slide-fade">
-        <n-card v-if="processing || processCompleted || processFailed" class="progress-card" :bordered="false">
+        <n-card v-if="currentTask" class="progress-card" :bordered="false">
           <div class="section-header">
             <n-icon size="20">
               <checkmark-circle-outline v-if="processCompleted" />
@@ -201,8 +201,8 @@
             <n-descriptions-item label="文件名">
               <n-text>{{ uploadResult.filename }}</n-text>
             </n-descriptions-item>
-            <n-descriptions-item v-if="jobId" label="任务 ID">
-              <n-text code>{{ jobId }}</n-text>
+            <n-descriptions-item v-if="currentJobId" label="任务 ID">
+              <n-text code>{{ currentJobId }}</n-text>
             </n-descriptions-item>
           </n-descriptions>
 
@@ -274,10 +274,11 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
+import { useProcessingStore } from '@/stores/processing'
 import {
   CloudUploadOutline,
   DocumentTextOutline,
@@ -288,11 +289,12 @@ import {
   GlobeOutline,
   LinkOutline
 } from '@vicons/ionicons5'
-import { uploadFile, uploadText, uploadUrl, getJobStatus } from '@/api/services'
+import { uploadFile, uploadText, uploadUrl } from '@/api/services'
 
 const router = useRouter()
 const { t } = useI18n()
 const message = useMessage()
+const processingStore = useProcessingStore()
 
 // Tab state
 const activeTab = ref('file')
@@ -312,17 +314,21 @@ const urlTitle = ref('')
 const uploading = ref(false)
 const uploadResult = ref(null)
 
-// Processing state
-const processing = ref(false)
-const jobId = ref(null)
-const progress = ref(0)
-const progressMessage = ref('')
-const processCompleted = ref(false)
-const processFailed = ref(false)
-const processStats = ref(null)
+// Current upload job ID for tracking
+const currentJobId = ref(null)
 
-// Polling
-let pollTimer = null
+// Processing state from global store
+const currentTask = computed(() => {
+  if (!currentJobId.value) return null
+  return processingStore.tasks.get(currentJobId.value)
+})
+
+const processing = computed(() => currentTask.value?.status === 'processing')
+const processCompleted = computed(() => currentTask.value?.status === 'completed')
+const processFailed = computed(() => currentTask.value?.status === 'failed')
+const progress = computed(() => currentTask.value?.progress || 0)
+const progressMessage = computed(() => currentTask.value?.message || '')
+const processStats = computed(() => currentTask.value?.stats)
 
 const formatFileSize = (bytes) => {
   if (bytes === 0) return '0 Bytes'
@@ -390,56 +396,8 @@ const removeFile = () => {
 // Reset all state
 const resetState = () => {
   uploadResult.value = null
-  processing.value = false
-  jobId.value = null
-  progress.value = 0
-  progressMessage.value = ''
-  processCompleted.value = false
-  processFailed.value = false
-  processStats.value = null
-  stopPolling()
+  currentJobId.value = null
 }
-
-// Start polling job status
-const startPolling = (jid) => {
-  jobId.value = jid
-  processing.value = true
-  pollTimer = setInterval(async () => {
-    try {
-      const status = await getJobStatus(jid)
-      progress.value = status.progress || 0
-      progressMessage.value = status.message || ''
-      
-      if (status.status === 'completed') {
-        processCompleted.value = true
-        processing.value = false
-        processStats.value = status.stats
-        stopPolling()
-        message.success('文档处理完成！')
-      } else if (status.status === 'failed') {
-        processFailed.value = true
-        processing.value = false
-        stopPolling()
-        message.error(status.message || '处理失败')
-      }
-    } catch (error) {
-      console.error('Failed to fetch job status:', error)
-    }
-  }, 1000) // Poll every 1 second
-}
-
-// Stop polling
-const stopPolling = () => {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
-
-// Cleanup on unmount
-onUnmounted(() => {
-  stopPolling()
-})
 
 const handleUpload = async () => {
   if (!selectedFile.value) {
@@ -463,7 +421,17 @@ const handleUpload = async () => {
     if (result.jobId) {
       message.success('文件上传成功，开始处理...')
       uploading.value = false
-      startPolling(result.jobId)
+      currentJobId.value = result.jobId
+      
+      // Add task to global processing store
+      processingStore.addTask({
+        jobId: result.jobId,
+        documentId: result.documentId,
+        filename: result.filename,
+        status: 'processing',
+        progress: 0,
+        message: '开始处理...'
+      })
     } else {
       message.success(t('upload.upload_success'))
       uploading.value = false
@@ -512,7 +480,17 @@ const handleTextUpload = async () => {
     if (result.jobId) {
       message.success('文本已提交，开始处理...')
       uploading.value = false
-      startPolling(result.jobId)
+      currentJobId.value = result.jobId
+      
+      // Add task to global processing store
+      processingStore.addTask({
+        jobId: result.jobId,
+        documentId: result.documentId,
+        filename: result.filename,
+        status: 'processing',
+        progress: 0,
+        message: '开始处理...'
+      })
     } else {
       message.success('文本已保存')
       uploading.value = false
@@ -556,7 +534,17 @@ const handleUrlUpload = async () => {
     if (result.jobId) {
       message.success('网页内容已抓取，开始处理...')
       uploading.value = false
-      startPolling(result.jobId)
+      currentJobId.value = result.jobId
+      
+      // Add task to global processing store
+      processingStore.addTask({
+        jobId: result.jobId,
+        documentId: result.documentId,
+        filename: result.filename,
+        status: 'processing',
+        progress: 0,
+        message: '开始处理...'
+      })
     } else {
       message.success('网页内容已保存')
       uploading.value = false

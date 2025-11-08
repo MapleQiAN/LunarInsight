@@ -69,6 +69,9 @@
         </div>
       </n-layout-content>
     </n-layout>
+
+    <!-- Global Processing Floater -->
+    <processing-floater />
   </n-layout>
 </template>
 
@@ -77,6 +80,7 @@ import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import ProcessingFloater from '@/components/ProcessingFloater.vue'
 import {
   CubeOutline,
   GlobeOutline,
