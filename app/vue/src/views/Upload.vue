@@ -1,20 +1,20 @@
 <template>
   <div class="upload-page">
-    <!-- Enhanced Header -->
-    <div class="upload-header">
-      <div>
-        <h1 class="upload-title">
-          <n-gradient-text type="warning">
-            {{ t('upload.title') }}
-          </n-gradient-text>
-        </h1>
-        <p class="upload-subtitle">{{ t('upload.supported_formats') }}</p>
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="header-content">
+        <h1 class="page-title">{{ t('upload.title') }}</h1>
+        <p class="page-subtitle">{{ t('upload.supported_formats') }}</p>
       </div>
     </div>
 
     <n-space vertical :size="24">
       <!-- Upload Card -->
       <n-card class="upload-card" :bordered="false">
+        <div class="section-header">
+          <n-icon size="20"><cloud-upload-outline /></n-icon>
+          <h3>文件上传</h3>
+        </div>
         <n-upload
           :max="1"
           :default-upload="false"
@@ -26,17 +26,15 @@
             <div class="dragger-content">
               <div class="dragger-icon-wrapper">
                 <n-icon size="64" :component="CloudUploadOutline" class="dragger-icon" />
-                <div class="icon-ring"></div>
-                <div class="icon-ring ring-2"></div>
               </div>
               <div class="dragger-text">
                 <h3>{{ t('upload.choose_file') }}</h3>
                 <p>{{ t('upload.drag_hint') }}</p>
                 <div class="dragger-formats">
-                  <n-tag round size="small" type="info">PDF</n-tag>
-                  <n-tag round size="small" type="success">Markdown</n-tag>
-                  <n-tag round size="small" type="warning">TXT</n-tag>
-                  <n-tag round size="small" type="primary">Word</n-tag>
+                  <n-tag :bordered="false" size="small" type="warning">PDF</n-tag>
+                  <n-tag :bordered="false" size="small" type="success">Markdown</n-tag>
+                  <n-tag :bordered="false" size="small" type="info">TXT</n-tag>
+                  <n-tag :bordered="false" size="small" type="error">Word</n-tag>
                 </div>
               </div>
             </div>
@@ -83,14 +81,9 @@
       <!-- Success Card -->
       <transition name="slide-fade">
         <n-card v-if="uploadResult" class="success-card" :bordered="false">
-          <div class="success-header">
-            <div class="success-icon">
-              <n-icon size="48" :component="CheckmarkCircleOutline" />
-            </div>
-            <div class="success-content">
-              <h2>{{ t('upload.upload_success') }}</h2>
-              <p>{{ t('upload.upload_success_desc') }}</p>
-            </div>
+          <div class="section-header">
+            <n-icon size="20"><checkmark-circle-outline /></n-icon>
+            <h3>{{ t('upload.upload_success') }}</h3>
           </div>
 
           <n-descriptions bordered :column="1" class="result-descriptions">
@@ -121,14 +114,9 @@
       <!-- Ingestion Started Card -->
       <transition name="slide-fade">
         <n-card v-if="ingestionResult" class="ingestion-card" :bordered="false">
-          <div class="ingestion-header">
-            <div class="ingestion-icon">
-              <n-icon size="48" :component="CodeWorkingOutline" />
-            </div>
-            <div class="ingestion-content">
-              <h2>{{ t('upload.ingestion_started') }}</h2>
-              <p>{{ t('upload.ingestion_started_desc') }}</p>
-            </div>
+          <div class="section-header">
+            <n-icon size="20"><code-working-outline /></n-icon>
+            <h3>{{ t('upload.ingestion_started') }}</h3>
           </div>
 
           <n-descriptions bordered :column="1" class="result-descriptions">
@@ -310,7 +298,7 @@ const resetUpload = () => {
 <style lang="scss" scoped>
 .upload-page {
   padding: 32px 48px;
-  background: #f5f7fa;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   min-height: calc(100vh - 70px);
   position: relative;
 
@@ -322,9 +310,9 @@ const resetUpload = () => {
     right: 0;
     bottom: 0;
     background: 
-      radial-gradient(circle at 20% 20%, rgba(245, 158, 11, 0.05) 0%, transparent 50%),
-      radial-gradient(circle at 80% 80%, rgba(251, 191, 36, 0.05) 0%, transparent 50%),
-      radial-gradient(circle at 50% 50%, rgba(217, 119, 6, 0.03) 0%, transparent 60%);
+      radial-gradient(circle at 20% 20%, rgba(194, 164, 116, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(155, 135, 245, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.06) 0%, transparent 60%);
     pointer-events: none;
     z-index: 0;
   }
@@ -334,21 +322,18 @@ const resetUpload = () => {
     z-index: 1;
   }
 
-  // Header - 轻奢现代化设计
-  .upload-header {
+  // Page Header
+  .page-header {
     margin-bottom: 32px;
-    padding: 32px 36px;
-    background: linear-gradient(135deg, 
-      rgba(255, 250, 240, 0.95) 0%, 
-      rgba(254, 243, 199, 0.95) 50%, 
-      rgba(253, 230, 138, 0.95) 100%);
-    border-radius: 24px;
+    padding: 32px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+    border-radius: 20px;
     backdrop-filter: blur(20px);
     box-shadow: 
       0 8px 32px rgba(0, 0, 0, 0.06),
       0 2px 8px rgba(0, 0, 0, 0.04),
       inset 0 1px 0 rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(194, 164, 116, 0.2);
     position: relative;
     overflow: hidden;
 
@@ -358,57 +343,82 @@ const resetUpload = () => {
       top: 0;
       left: 0;
       right: 0;
-      height: 2px;
+      height: 3px;
       background: linear-gradient(90deg, 
-        transparent, 
-        rgba(245, 158, 11, 0.4), 
-        transparent);
+        rgba(194, 164, 116, 0.5), 
+        rgba(155, 135, 245, 0.5), 
+        rgba(245, 158, 11, 0.5));
     }
 
-    .upload-title {
-      font-size: 36px;
+    .page-title {
+      font-size: 32px;
       font-weight: 700;
-      margin: 0 0 10px 0;
+      background: linear-gradient(135deg, #c2a474 0%, #9b87f5 50%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin: 0 0 8px 0;
       letter-spacing: -0.5px;
     }
 
-    .upload-subtitle {
-      font-size: 15px;
+    .page-subtitle {
+      font-size: 14px;
       color: #64748b;
       margin: 0;
       font-weight: 500;
     }
   }
 
-  // Upload Card - 企业级卡片
+  // Section Header (内卡片标题)
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid rgba(194, 164, 116, 0.1);
+
+    .n-icon {
+      color: #c2a474;
+    }
+
+    h3 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+      margin: 0;
+      letter-spacing: -0.3px;
+    }
+  }
+
+  // Upload Card
   .upload-card {
-    border-radius: 24px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%);
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
     box-shadow: 
       0 8px 32px rgba(0, 0, 0, 0.06),
       0 2px 12px rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(10px);
-    transition: all 0.3s;
+    border: 1px solid rgba(194, 164, 116, 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     &:hover {
       box-shadow: 
         0 12px 40px rgba(0, 0, 0, 0.08),
         0 4px 16px rgba(0, 0, 0, 0.06);
+      transform: translateY(-2px);
     }
   }
 
-  // Enhanced Dragger - 轻奢上传区
+  // Enhanced Dragger
   .enhanced-dragger {
     :deep(.n-upload-dragger) {
-      padding: 72px 48px;
-      border: 3px dashed rgba(194, 164, 116, 0.3);
-      border-radius: 24px;
-      background: linear-gradient(135deg, 
-        rgba(255, 250, 240, 0.8) 0%, 
-        rgba(254, 243, 199, 0.8) 50%, 
-        rgba(253, 230, 138, 0.6) 100%);
+      padding: 64px 48px;
+      border: 2px dashed rgba(194, 164, 116, 0.3);
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(248, 250, 252, 0.5) 100%);
       backdrop-filter: blur(10px);
-      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
       overflow: hidden;
 
@@ -417,21 +427,18 @@ const resetUpload = () => {
         position: absolute;
         inset: 0;
         background: 
-          radial-gradient(circle at 30% 40%, rgba(245, 158, 11, 0.05) 0%, transparent 60%),
-          radial-gradient(circle at 70% 60%, rgba(194, 164, 116, 0.05) 0%, transparent 60%);
+          radial-gradient(circle at 30% 40%, rgba(194, 164, 116, 0.05) 0%, transparent 60%),
+          radial-gradient(circle at 70% 60%, rgba(155, 135, 245, 0.05) 0%, transparent 60%);
         pointer-events: none;
       }
 
       &:hover {
-        border-color: rgba(194, 164, 116, 0.6);
-        background: linear-gradient(135deg, 
-          rgba(253, 230, 138, 0.9) 0%, 
-          rgba(252, 211, 77, 0.9) 50%, 
-          rgba(251, 191, 36, 0.8) 100%);
-        transform: translateY(-6px);
+        border-color: rgba(194, 164, 116, 0.5);
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(248, 250, 252, 0.8) 100%);
+        transform: translateY(-4px);
         box-shadow: 
-          0 16px 40px rgba(245, 158, 11, 0.25),
-          0 8px 16px rgba(0, 0, 0, 0.08);
+          0 12px 32px rgba(194, 164, 116, 0.15),
+          0 4px 12px rgba(0, 0, 0, 0.06);
       }
     }
 
@@ -439,7 +446,7 @@ const resetUpload = () => {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 24px;
+      gap: 20px;
     }
 
     .dragger-icon-wrapper {
@@ -449,25 +456,10 @@ const resetUpload = () => {
       justify-content: center;
 
       .dragger-icon {
-        color: #f59e0b;
+        color: #c2a474;
         position: relative;
         z-index: 2;
         animation: float 3s ease-in-out infinite;
-      }
-
-      .icon-ring {
-        position: absolute;
-        width: 100px;
-        height: 100px;
-        border: 3px solid rgba(245, 158, 11, 0.2);
-        border-radius: 50%;
-        animation: pulse 2s ease-in-out infinite;
-
-        &.ring-2 {
-          width: 120px;
-          height: 120px;
-          animation-delay: 0.5s;
-        }
       }
     }
 
@@ -477,99 +469,84 @@ const resetUpload = () => {
       z-index: 1;
 
       h3 {
-        font-size: 22px;
-        font-weight: 700;
-        color: #0f172a;
-        margin: 0 0 10px 0;
+        font-size: 20px;
+        font-weight: 600;
+        color: #1e293b;
+        margin: 0 0 8px 0;
         letter-spacing: -0.3px;
       }
 
       p {
-        font-size: 15px;
+        font-size: 14px;
         color: #64748b;
-        margin: 0 0 20px 0;
+        margin: 0 0 16px 0;
         font-weight: 500;
       }
 
       .dragger-formats {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         justify-content: center;
         
         :deep(.n-tag) {
           font-weight: 600;
           letter-spacing: 0.3px;
-          padding: 6px 14px;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+          padding: 4px 12px;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
         }
       }
     }
   }
 
-  // File Selected Card - 轻奢文件卡片
+  // File Selected Card
   .file-selected-card {
-    margin-top: 28px;
-    padding: 28px;
-    border-radius: 20px;
-    background: linear-gradient(135deg, 
-      rgba(59, 130, 246, 0.08) 0%, 
-      rgba(37, 99, 235, 0.08) 100%);
-    border: 2px solid rgba(59, 130, 246, 0.2);
+    margin-top: 24px;
+    padding: 24px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(194, 164, 116, 0.08) 0%, rgba(155, 135, 245, 0.08) 100%);
+    border: 1px solid rgba(194, 164, 116, 0.2);
     backdrop-filter: blur(10px);
-    box-shadow: 
-      0 4px 16px rgba(0, 0, 0, 0.04),
-      inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 
     .file-preview {
       display: flex;
       align-items: center;
-      gap: 20px;
-      padding: 24px;
-      background: linear-gradient(135deg, 
-        rgba(255, 255, 255, 0.98) 0%, 
-        rgba(248, 250, 252, 0.98) 100%);
+      gap: 16px;
+      padding: 20px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
       backdrop-filter: blur(10px);
-      border-radius: 18px;
-      margin-bottom: 20px;
-      box-shadow: 
-        0 4px 16px rgba(0, 0, 0, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 12px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(194, 164, 116, 0.15);
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
       &:hover {
-        box-shadow: 
-          0 8px 20px rgba(0, 0, 0, 0.1),
-          inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         transform: translateY(-2px);
       }
 
       .file-icon-wrapper {
-        width: 64px;
-        height: 64px;
-        background: linear-gradient(135deg, 
-          #3b82f6 0%, 
-          #2563eb 50%, 
-          #1d4ed8 100%);
-        border-radius: 18px;
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, #c2a474 0%, #9b87f5 100%);
+        border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
         color: white;
         flex-shrink: 0;
-        box-shadow: 
-          0 6px 16px rgba(59, 130, 246, 0.3),
-          0 2px 8px rgba(0, 0, 0, 0.08);
+        box-shadow: 0 4px 12px rgba(194, 164, 116, 0.3);
       }
 
       .file-details {
         flex: 1;
 
         .file-name {
-          font-size: 17px;
-          font-weight: 700;
-          color: #0f172a;
-          margin-bottom: 8px;
+          font-size: 16px;
+          font-weight: 600;
+          color: #1e293b;
+          margin-bottom: 6px;
           word-break: break-all;
           letter-spacing: -0.2px;
         }
@@ -577,18 +554,18 @@ const resetUpload = () => {
         .file-meta {
           display: flex;
           align-items: center;
-          gap: 10px;
-          font-size: 14px;
+          gap: 8px;
+          font-size: 13px;
           color: #64748b;
 
           .file-size {
-            font-weight: 600;
+            font-weight: 500;
           }
 
           .file-type {
-            font-weight: 700;
-            color: #3b82f6;
-            letter-spacing: 0.5px;
+            font-weight: 600;
+            color: #c2a474;
+            letter-spacing: 0.3px;
           }
         }
       }
@@ -596,191 +573,102 @@ const resetUpload = () => {
 
     .upload-button {
       margin-top: 12px;
-      height: 52px;
-      font-size: 17px;
-      font-weight: 700;
+      height: 48px;
+      font-size: 16px;
+      font-weight: 600;
       letter-spacing: 0.3px;
-      background: linear-gradient(135deg, 
-        #3b82f6 0%, 
-        #2563eb 50%, 
-        #1d4ed8 100%);
+      background: linear-gradient(135deg, #c2a474 0%, #9b87f5 100%);
       border: none;
-      border-radius: 18px;
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(194, 164, 116, 0.3);
 
       &:hover {
-        background: linear-gradient(135deg, 
-          #2563eb 0%, 
-          #1d4ed8 50%, 
-          #1e40af 100%);
-        transform: translateY(-3px);
-        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(194, 164, 116, 0.4);
       }
     }
   }
 
-  // Success Card - 轻奢成功卡片
+  // Success Card
   .success-card {
-    border-radius: 24px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%);
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
     box-shadow: 
       0 8px 32px rgba(0, 0, 0, 0.06),
       0 2px 12px rgba(0, 0, 0, 0.04);
-    border: 2px solid rgba(16, 185, 129, 0.2);
-    backdrop-filter: blur(10px);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
-    .success-header {
-      display: flex;
-      align-items: center;
-      gap: 24px;
-      margin-bottom: 28px;
-      padding: 28px;
-      background: linear-gradient(135deg, 
-        rgba(240, 253, 244, 0.8) 0%, 
-        rgba(209, 250, 229, 0.6) 100%);
-      backdrop-filter: blur(10px);
-      border-radius: 20px;
-      border: 1px solid rgba(16, 185, 129, 0.15);
-
-      .success-icon {
-        width: 72px;
-        height: 72px;
-        background: linear-gradient(135deg, 
-          #10b981 0%, 
-          #059669 50%, 
-          #047857 100%);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        box-shadow: 
-          0 8px 20px rgba(16, 185, 129, 0.4),
-          0 2px 8px rgba(0, 0, 0, 0.1);
-        flex-shrink: 0;
-        animation: bounceIn 0.6s ease-out;
-      }
-
-      .success-content {
-        h2 {
-          font-size: 22px;
-          font-weight: 800;
-          color: #0f172a;
-          margin: 0 0 10px 0;
-          letter-spacing: -0.3px;
-        }
-
-        p {
-          font-size: 15px;
-          color: #64748b;
-          margin: 0;
-          font-weight: 500;
-        }
-      }
+    &:hover {
+      box-shadow: 
+        0 12px 40px rgba(0, 0, 0, 0.08),
+        0 4px 16px rgba(0, 0, 0, 0.06);
     }
 
     .result-descriptions {
       margin-bottom: 20px;
       
       :deep(.n-descriptions) {
-        border-radius: 16px;
+        border-radius: 12px;
         overflow: hidden;
       }
     }
 
     .action-button {
-      height: 52px;
-      font-size: 17px;
-      font-weight: 700;
+      height: 48px;
+      font-size: 16px;
+      font-weight: 600;
       letter-spacing: 0.3px;
-      border-radius: 18px;
+      border-radius: 12px;
       box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 
       &:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
       }
     }
   }
 
-  // Ingestion Card - 轻奢处理卡片
+  // Ingestion Card
   .ingestion-card {
-    border-radius: 24px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%);
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
     box-shadow: 
       0 8px 32px rgba(0, 0, 0, 0.06),
       0 2px 12px rgba(0, 0, 0, 0.04);
-    border: 2px solid rgba(59, 130, 246, 0.2);
-    backdrop-filter: blur(10px);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
-    .ingestion-header {
-      display: flex;
-      align-items: center;
-      gap: 24px;
-      margin-bottom: 28px;
-      padding: 28px;
-      background: linear-gradient(135deg, 
-        rgba(236, 254, 255, 0.8) 0%, 
-        rgba(219, 234, 254, 0.6) 100%);
-      backdrop-filter: blur(10px);
-      border-radius: 20px;
-      border: 1px solid rgba(59, 130, 246, 0.15);
-
-      .ingestion-icon {
-        width: 72px;
-        height: 72px;
-        background: linear-gradient(135deg, 
-          #3b82f6 0%, 
-          #2563eb 50%, 
-          #1d4ed8 100%);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        box-shadow: 
-          0 8px 20px rgba(59, 130, 246, 0.4),
-          0 2px 8px rgba(0, 0, 0, 0.1);
-        flex-shrink: 0;
-        animation: pulse-icon 2s ease-in-out infinite;
-      }
-
-      .ingestion-content {
-        h2 {
-          font-size: 22px;
-          font-weight: 800;
-          color: #0f172a;
-          margin: 0 0 10px 0;
-          letter-spacing: -0.3px;
-        }
-
-        p {
-          font-size: 15px;
-          color: #64748b;
-          margin: 0;
-          font-weight: 500;
-        }
-      }
+    &:hover {
+      box-shadow: 
+        0 12px 40px rgba(0, 0, 0, 0.08),
+        0 4px 16px rgba(0, 0, 0, 0.06);
     }
 
     .result-descriptions {
+      margin-bottom: 20px;
+      
       :deep(.n-descriptions) {
-        border-radius: 16px;
+        border-radius: 12px;
         overflow: hidden;
       }
     }
 
     .action-button {
-      height: 52px;
-      font-size: 17px;
-      font-weight: 700;
+      height: 48px;
+      font-size: 16px;
+      font-weight: 600;
       letter-spacing: 0.3px;
-      border-radius: 18px;
+      border-radius: 12px;
 
       &:first-of-type {
         box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 
         &:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
         }
       }
     }
@@ -789,11 +677,11 @@ const resetUpload = () => {
 
 // 全局样式增强
 :deep(.n-card) {
-  border-radius: 24px;
+  border-radius: 20px;
 }
 
 :deep(.n-button) {
-  border-radius: 16px;
+  border-radius: 12px;
   font-weight: 600;
   letter-spacing: 0.3px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -803,53 +691,17 @@ const resetUpload = () => {
   }
 }
 
-// Animations
+// 动画
 @keyframes float {
   0%, 100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-10px);
+    transform: translateY(-8px);
   }
 }
 
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.3;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.1;
-  }
-}
-
-@keyframes bounceIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
-  70% {
-    transform: scale(0.9);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes pulse-icon {
-  0%, 100% {
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-  }
-  50% {
-    box-shadow: 0 4px 24px rgba(59, 130, 246, 0.6);
-  }
-}
-
+// 过渡动画
 .slide-fade-enter-active {
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -860,12 +712,12 @@ const resetUpload = () => {
 
 .slide-fade-enter-from {
   opacity: 0;
-  transform: translateY(30px);
+  transform: translateY(24px);
 }
 
 .slide-fade-leave-to {
   opacity: 0;
-  transform: translateY(-30px);
+  transform: translateY(-24px);
 }
 </style>
 
