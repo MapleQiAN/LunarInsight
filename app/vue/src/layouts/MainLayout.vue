@@ -128,23 +128,23 @@ const languageOptions = [
 ]
 
 // User Menu Options
-const userMenuOptions = [
+const userMenuOptions = computed(() => [
   {
-    label: t('common.edit'),
+    label: t('common.profile'),
     key: 'profile'
   },
   {
-    label: t('common.edit'),
+    label: t('common.settings'),
     key: 'settings'
   },
   {
     type: 'divider'
   },
   {
-    label: 'Logout',
+    label: t('common.logout'),
     key: 'logout'
   }
-]
+])
 
 // Menu Select Handler
 const handleMenuSelect = (key) => {
@@ -160,7 +160,15 @@ const handleLanguageChange = (key) => {
 
 // User Menu Handler
 const handleUserMenuSelect = (key) => {
-  console.log('User menu selected:', key)
+  if (key === 'settings') {
+    router.push('/settings')
+  } else if (key === 'profile') {
+    // TODO: implement profile page
+    console.log('Profile not implemented yet')
+  } else if (key === 'logout') {
+    // TODO: implement logout
+    console.log('Logout not implemented yet')
+  }
 }
 
 // Watch route changes

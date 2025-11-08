@@ -148,6 +148,42 @@
     "failed": "Failed",
     "unknown": "Unknown"
   },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Configure AI provider and system parameters",
+    "ai_provider": "AI Provider Configuration",
+    "provider_type": "Provider Type",
+    "provider_required": "Please select an AI provider",
+    "configuration": "Configuration",
+    "api_key": "API Key",
+    "api_key_placeholder": "Enter your OpenAI API key",
+    "api_key_required": "API key is required",
+    "model": "Model",
+    "base_url": "Base URL",
+    "base_url_placeholder": "Optional, custom API URL",
+    "select_or_type_model": "Select or type model name",
+    "refresh_models": "Refresh Models",
+    "test_connection": "Test Connection",
+    "save": "Save Settings",
+    "database": "Database Configuration",
+    "neo4j_uri": "Neo4j URI",
+    "neo4j_user": "Neo4j User",
+    "redis_url": "Redis URL",
+    "database_readonly_notice": "Database configuration is read-only, please modify via environment variables",
+    "help": "Help",
+    "how_to_use_ollama": "How to use Ollama (Local Models)",
+    "ollama_step1": "Visit https://ollama.ai/ to download and install Ollama",
+    "ollama_step2": "Run 'ollama pull llama3' to download the model",
+    "ollama_step3": "Ensure Ollama service is running on http://localhost:11434",
+    "how_to_use_openai": "How to use OpenAI",
+    "openai_step1": "Visit https://platform.openai.com/ to get your API key",
+    "openai_step2": "Enter the API key and select an appropriate model",
+    "load_failed": "Failed to load settings",
+    "save_failed": "Failed to save settings",
+    "test_failed": "Connection test failed",
+    "models_loaded": "Loaded {count} models",
+    "fetch_models_failed": "Failed to fetch model list"
+  },
   "common": {
     "loading": "Loading...",
     "success": "Success",
@@ -161,7 +197,10 @@
     "edit": "Edit",
     "view": "View",
     "close": "Close",
-    "language": "Language"
+    "language": "Language",
+    "profile": "Profile",
+    "settings": "Settings",
+    "logout": "Logout"
   }
 }
 

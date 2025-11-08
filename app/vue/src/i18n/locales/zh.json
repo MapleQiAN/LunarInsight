@@ -148,6 +148,42 @@
     "failed": "失败",
     "unknown": "未知"
   },
+  "settings": {
+    "title": "系统设置",
+    "subtitle": "配置 AI 提供商和系统参数",
+    "ai_provider": "AI 提供商配置",
+    "provider_type": "提供商类型",
+    "provider_required": "请选择 AI 提供商",
+    "configuration": "配置",
+    "api_key": "API 密钥",
+    "api_key_placeholder": "请输入 OpenAI API 密钥",
+    "api_key_required": "API 密钥不能为空",
+    "model": "模型",
+    "base_url": "API 地址",
+    "base_url_placeholder": "可选，自定义 API 地址",
+    "select_or_type_model": "选择或输入模型名称",
+    "refresh_models": "刷新模型列表",
+    "test_connection": "测试连接",
+    "save": "保存设置",
+    "database": "数据库配置",
+    "neo4j_uri": "Neo4j URI",
+    "neo4j_user": "Neo4j 用户名",
+    "redis_url": "Redis URL",
+    "database_readonly_notice": "数据库配置为只读，请通过环境变量修改",
+    "help": "使用帮助",
+    "how_to_use_ollama": "如何使用 Ollama (本地模型)",
+    "ollama_step1": "访问 https://ollama.ai/ 下载并安装 Ollama",
+    "ollama_step2": "运行 'ollama pull llama3' 下载模型",
+    "ollama_step3": "确保 Ollama 服务运行在 http://localhost:11434",
+    "how_to_use_openai": "如何使用 OpenAI",
+    "openai_step1": "访问 https://platform.openai.com/ 获取 API 密钥",
+    "openai_step2": "输入 API 密钥并选择合适的模型",
+    "load_failed": "加载设置失败",
+    "save_failed": "保存设置失败",
+    "test_failed": "连接测试失败",
+    "models_loaded": "已加载 {count} 个模型",
+    "fetch_models_failed": "获取模型列表失败"
+  },
   "common": {
     "loading": "加载中...",
     "success": "成功",
@@ -161,7 +197,10 @@
     "edit": "编辑",
     "view": "查看",
     "close": "关闭",
-    "language": "语言"
+    "language": "语言",
+    "profile": "个人资料",
+    "settings": "系统设置",
+    "logout": "退出登录"
   }
 }
 

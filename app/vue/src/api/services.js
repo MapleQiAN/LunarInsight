@@ -47,3 +47,16 @@ export const getEdges = (relType = null, limit = 100) => {
 export const getJobStatus = (jobId) => 
   api.get(`/ingest/status/${jobId}`)
 
+// Settings
+export const getSettings = () => 
+  api.get('/settings/')
+
+export const updateAISettings = (settings) => 
+  api.post('/settings/ai', settings)
+
+export const testAIConnection = (settings) => 
+  api.post('/settings/test-connection', settings)
+
+export const getOllamaModels = () => 
+  api.get('/settings/ollama/models')
+

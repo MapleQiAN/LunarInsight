@@ -35,6 +35,12 @@ const routes = [
         name: 'Status',
         component: () => import('@/views/Status.vue'),
         meta: { title: 'status.title' }
+      },
+      {
+        path: 'settings',
+        name: 'Settings',
+        component: () => import('@/views/Settings.vue'),
+        meta: { title: 'settings.title' }
       }
     ]
   }
