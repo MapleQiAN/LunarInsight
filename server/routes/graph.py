@@ -190,6 +190,174 @@ async def get_edges(
     return edges
 
 
+@router.get("/documents/{document_id}/graph", response_model=GraphResponse)
+async def get_document_graph(
+    document_id: str,
+    depth: int = Query(2, ge=1, le=5, description="Relationship depth")
+):
+    """
+    获取指定文档的知识图谱。
+    
+    Args:
+        document_id: 文档 ID
+        depth: 关系深度（1-5）
+        
+    Returns:
+        包含节点和边的图谱数据
+    """
+    # Check if document exists
+    doc_check = neo4j_client.execute_query(
+        "MATCH (d:Document {id: $doc_id}) RETURN d",
+        {"doc_id": document_id}
+    )
+    
+    if not doc_check:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Query for document and related concepts with specified depth
+    query = f"""
+    MATCH (d:Document {{id: $doc_id}})
+    MATCH path = (d)-[*1..{depth}]-(n)
+    WITH d, n, relationships(path) as rels
+    RETURN d, n, rels
+    LIMIT 1000
+    """
+    
+    results = neo4j_client.execute_query(query, {"doc_id": document_id})
+    
+    nodes_dict = {}
+    edges = []
+    
+    for record in results:
+        # Add document node
+        if "d" in record and record["d"]:
+            doc_node = record["d"]
+            doc_id_val = doc_node.get("id") or str(hash(str(doc_node)))
+            if doc_id_val not in nodes_dict:
+                nodes_dict[doc_id_val] = Node(
+                    id=str(doc_id_val),
+                    labels=["Document"],
+                    properties=dict(doc_node)
+                )
+        
+        # Add related node
+        if "n" in record and record["n"]:
+            node = record["n"]
+            node_id = node.get("id") or node.get("name") or str(hash(str(node)))
+            if node_id not in nodes_dict:
+                labels = list(node.labels) if hasattr(node, "labels") else ["Concept"]
+                nodes_dict[node_id] = Node(
+                    id=str(node_id),
+                    labels=labels,
+                    properties=dict(node)
+                )
+        
+        # Add relationships
+        if "rels" in record and record["rels"]:
+            for rel in record["rels"]:
+                if hasattr(rel, "start_node") and hasattr(rel, "end_node"):
+                    source_id = rel.start_node.get("id") or rel.start_node.get("name")
+                    target_id = rel.end_node.get("id") or rel.end_node.get("name")
+                    rel_type = rel.type if hasattr(rel, "type") else "RELATES_TO"
+                    
+                    edges.append(Edge(
+                        source=str(source_id),
+                        target=str(target_id),
+                        type=rel_type,
+                        properties=dict(rel) if hasattr(rel, "__dict__") else {}
+                    ))
+    
+    return GraphResponse(
+        nodes=list(nodes_dict.values()),
+        edges=edges,
+        stats={"count": len(nodes_dict), "edges": len(edges)}
+    )
+
+
+@router.get("/concepts/{concept_name}/graph", response_model=GraphResponse)
+async def get_concept_graph(
+    concept_name: str,
+    depth: int = Query(2, ge=1, le=5, description="Relationship depth")
+):
+    """
+    获取指定概念的知识图谱。
+    
+    Args:
+        concept_name: 概念名称
+        depth: 关系深度（1-5）
+        
+    Returns:
+        包含节点和边的图谱数据
+    """
+    # Check if concept exists
+    concept_check = neo4j_client.execute_query(
+        "MATCH (c:Concept {name: $name}) RETURN c",
+        {"name": concept_name}
+    )
+    
+    if not concept_check:
+        raise HTTPException(status_code=404, detail="Concept not found")
+    
+    # Query for concept and related nodes
+    query = f"""
+    MATCH (c:Concept {{name: $name}})
+    MATCH path = (c)-[*1..{depth}]-(n)
+    WITH c, n, relationships(path) as rels
+    RETURN c, n, rels
+    LIMIT 1000
+    """
+    
+    results = neo4j_client.execute_query(query, {"name": concept_name})
+    
+    nodes_dict = {}
+    edges = []
+    
+    for record in results:
+        # Add central concept node
+        if "c" in record and record["c"]:
+            concept_node = record["c"]
+            concept_id = concept_node.get("name") or str(hash(str(concept_node)))
+            if concept_id not in nodes_dict:
+                nodes_dict[concept_id] = Node(
+                    id=str(concept_id),
+                    labels=["Concept"],
+                    properties=dict(concept_node)
+                )
+        
+        # Add related node
+        if "n" in record and record["n"]:
+            node = record["n"]
+            node_id = node.get("id") or node.get("name") or str(hash(str(node)))
+            if node_id not in nodes_dict:
+                labels = list(node.labels) if hasattr(node, "labels") else []
+                nodes_dict[node_id] = Node(
+                    id=str(node_id),
+                    labels=labels,
+                    properties=dict(node)
+                )
+        
+        # Add relationships
+        if "rels" in record and record["rels"]:
+            for rel in record["rels"]:
+                if hasattr(rel, "start_node") and hasattr(rel, "end_node"):
+                    source_id = rel.start_node.get("id") or rel.start_node.get("name")
+                    target_id = rel.end_node.get("id") or rel.end_node.get("name")
+                    rel_type = rel.type if hasattr(rel, "type") else "RELATES_TO"
+                    
+                    edges.append(Edge(
+                        source=str(source_id),
+                        target=str(target_id),
+                        type=rel_type,
+                        properties=dict(rel) if hasattr(rel, "__dict__") else {}
+                    ))
+    
+    return GraphResponse(
+        nodes=list(nodes_dict.values()),
+        edges=edges,
+        stats={"count": len(nodes_dict), "edges": len(edges)}
+    )
+
+
 @router.get("/stats")
 async def get_graph_stats():
     """Get knowledge graph statistics."""

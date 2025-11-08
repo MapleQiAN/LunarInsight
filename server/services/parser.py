@@ -119,6 +119,75 @@ class MarkdownParser(Parser):
         return content, chunks
 
 
+class TxtParser(Parser):
+    """Plain text parser."""
+    
+    def parse(self, file_path: str) -> tuple[str, List[Chunk]]:
+        """Parse TXT file."""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        chunks = []
+        
+        # Split by double newlines (paragraphs)
+        paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+        
+        for idx, para in enumerate(paragraphs):
+            if len(para) < 10:  # Skip very short paragraphs
+                continue
+            
+            chunks.append(Chunk(
+                doc_id=Path(file_path).stem,
+                chunk_id=f"c_{idx}",
+                text=para,
+                meta={
+                    "page": 1,
+                    "section": None,
+                    "offset": [0, len(para)]
+                }
+            ))
+        
+        return content, chunks
+
+
+class WordParser(Parser):
+    """Word document parser (DOC/DOCX)."""
+    
+    def parse(self, file_path: str) -> tuple[str, List[Chunk]]:
+        """Parse Word document."""
+        try:
+            import docx
+        except ImportError:
+            raise ImportError("python-docx is required for Word document parsing. Install with: pip install python-docx")
+        
+        doc = docx.Document(file_path)
+        chunks = []
+        full_text_parts = []
+        
+        chunk_idx = 0
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if not text or len(text) < 10:
+                continue
+            
+            full_text_parts.append(text)
+            
+            chunks.append(Chunk(
+                doc_id=Path(file_path).stem,
+                chunk_id=f"c_{chunk_idx}",
+                text=text,
+                meta={
+                    "page": 1,
+                    "section": para.style.name if para.style else None,
+                    "offset": [0, len(text)]
+                }
+            ))
+            chunk_idx += 1
+        
+        full_text = "\n\n".join(full_text_parts)
+        return full_text, chunks
+
+
 class ParserFactory:
     """Factory for creating parsers based on file type."""
     
@@ -129,6 +198,8 @@ class ParserFactory:
             "pdf": PDFParser,
             "md": MarkdownParser,
             "markdown": MarkdownParser,
+            "txt": TxtParser,
+            "word": WordParser,
         }
         
         parser_class = parsers.get(kind.lower())

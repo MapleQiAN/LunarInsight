@@ -109,32 +109,61 @@ class TripletExtractor:
             return []
     
     def _build_prompt(self, text: str) -> str:
-        """Build extraction prompt."""
-        return f"""Extract knowledge triplets (subject-predicate-object) from the following text.
+        """Build bilingual extraction prompt for both Chinese and English."""
+        return f"""You are a professional knowledge graph construction expert. Extract structured knowledge triplets (subject-relation-object) from the given text.
+你是一个专业的知识图谱构建专家。请从以下文本中提取结构化的知识三元组（主体-关系-客体）。
 
-Text:
+**Text Content / 文本内容：**
 {text}
 
-Return a JSON object with this structure:
+**Task Requirements / 任务要求：**
+1. Identify core concepts, entities, and key information / 识别核心概念、实体和关键信息
+2. Extract semantic relationships between them / 提取它们之间的语义关系
+3. Perform structured organization and optimization / 进行结构化整理和优化
+4. Ensure knowledge practicality and accuracy / 确保知识具有实用性和准确性
+5. **Preserve original language**: Keep concepts in their original language (Chinese/English) / **保留原始语言**：保持概念的原始语言（中英文）
+
+**Relationship Types Guide / 关系类型指南：**
+- `is_a` / `定义为`: A is a type/kind of B / A 是 B 的一种/一类
+- `contains` / `包含`: A contains B as a component / A 包含 B 作为组成部分
+- `belongs_to` / `属于`: A belongs to category B / A 属于 B 类别
+- `has_property` / `具有属性`: A has characteristic or attribute / A 具有某种特性或属性
+- `used_for` / `用于`: A is used to achieve/accomplish B / A 用于实现/完成 B
+- `affects` / `影响`: A affects B / A 对 B 产生影响
+- `relates_to` / `关联`: A is related to B / A 与 B 存在关联
+- `composed_of` / `由...组成`: A is composed of B / A 由 B 组成
+- `produces` / `产生`: A produces/generates B / A 产生/生成 B
+- `depends_on` / `依赖`: A depends on B / A 依赖于 B
+- `causes` / `导致`: A causes B / A 导致 B
+- `implements` / `实现`: A implements B / A 实现了 B
+- `derived_from` / `派生自`: A is derived from B / A 派生自 B
+- `similar_to` / `相似于`: A is similar to B / A 与 B 相似
+
+**Output Format (Pure JSON) / 输出格式（纯 JSON）：**
 {{
   "triplets": [
     {{
-      "subject": "entity or concept name",
-      "predicate": "relationship type (e.g., is_a, has_property, relates_to, mentions)",
-      "object": "target entity or value",
-      "confidence": 0.0-1.0
+      "subject": "Concept/Entity Name",
+      "predicate": "Relationship Type (use types from guide above)",
+      "object": "Target Concept/Entity/Attribute Value",
+      "confidence": 0.85,
+      "language": "en" or "zh" or "mixed"
     }}
   ]
 }}
 
-Focus on:
-- Concepts and their relationships
-- Definitions and classifications
-- Properties and attributes
-- Causal or logical connections
+**Important Notes / 注意事项：**
+- Subject and object should be concise, standardized nouns or noun phrases / 主体和客体应该是简洁、规范的名词或名词短语
+- Keep the original language of concepts (do NOT translate) / 保持概念的原始语言（不要翻译）
+- Use English relationship type identifiers (e.g., "is_a", "contains") / 使用英文关系类型标识符
+- Confidence should reflect knowledge certainty (0.0-1.0) / confidence 应反映知识确定程度（0.0-1.0）
+- Give higher confidence to definitional, structural knowledge / 对定义性、结构性知识给予更高置信度
+- Ignore trivial details, focus on core knowledge / 忽略无关细节，聚焦核心知识点
+- If no clear knowledge in text, return empty array / 如果文本中没有明确知识点，返回空数组
 
-Return only the JSON object, no additional text."""
-
+Return ONLY the JSON object, no other explanatory text.
+只返回 JSON 对象，不要包含任何其他文字说明。"""
+    
     def _mock_extract(self, chunk: Chunk) -> List[Triplet]:
         """Mock extraction for testing without OpenAI API."""
         # Simple rule-based extraction as fallback

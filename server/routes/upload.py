@@ -3,14 +3,24 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile, BackgroundTasks
 
 from infra.neo4j_client import neo4j_client
 from infra.storage import Storage
+from services.parser import ParserFactory
+from services.extractor import TripletExtractor
+from services.linker import EntityLinker
+from services.graph_service import GraphService
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 storage = Storage()
+extractor = TripletExtractor()
+linker = EntityLinker()
+graph_service = GraphService()
+
+# Job storage for tracking processing status
+processing_jobs = {}
 
 ALLOWED_EXTENSIONS = {
     ".pdf": "pdf",
@@ -140,4 +150,189 @@ async def get_document(document_id: str):
     
     doc_data = result[0]["d"]
     return doc_data
+
+
+def process_document_background(doc_id: str, file_path: str, kind: str, job_id: str):
+    """Background task for processing document into knowledge graph."""
+    processing_jobs[job_id] = {
+        "status": "processing",
+        "documentId": doc_id,
+        "progress": 0,
+        "message": "开始处理文档..."
+    }
+    
+    try:
+        # Step 1: Parse document
+        processing_jobs[job_id]["message"] = "正在解析文档..."
+        processing_jobs[job_id]["progress"] = 10
+        
+        parser = ParserFactory.create_parser(kind)
+        full_text, chunks = parser.parse(file_path)
+        
+        processing_jobs[job_id]["message"] = f"已提取 {len(chunks)} 个文本块，正在进行知识抽取..."
+        processing_jobs[job_id]["progress"] = 30
+        
+        # Step 2: Extract triplets using AI
+        all_triplets = []
+        for i, chunk in enumerate(chunks):
+            triplets = extractor.extract(chunk)
+            all_triplets.extend(triplets)
+            processing_jobs[job_id]["progress"] = 30 + int((i + 1) / len(chunks) * 40)
+        
+        processing_jobs[job_id]["message"] = f"已抽取 {len(all_triplets)} 个知识三元组，正在链接实体..."
+        processing_jobs[job_id]["progress"] = 70
+        
+        # Step 3: Link and merge entities
+        linked_triplets = linker.link_and_merge(all_triplets)
+        
+        processing_jobs[job_id]["message"] = "正在构建知识图谱..."
+        processing_jobs[job_id]["progress"] = 85
+        
+        # Step 4: Ingest into Neo4j
+        graph_service.ingest_triplets(doc_id, linked_triplets)
+        
+        # Get graph statistics
+        concept_names = set(t.subject for t in linked_triplets) | set(t.object for t in linked_triplets)
+        
+        processing_jobs[job_id]["status"] = "completed"
+        processing_jobs[job_id]["progress"] = 100
+        processing_jobs[job_id]["message"] = "知识图谱构建完成！"
+        processing_jobs[job_id]["stats"] = {
+            "chunks": len(chunks),
+            "triplets": len(linked_triplets),
+            "concepts": len(concept_names),
+            "textLength": len(full_text)
+        }
+        
+    except Exception as e:
+        processing_jobs[job_id]["status"] = "failed"
+        processing_jobs[job_id]["message"] = f"处理失败: {str(e)}"
+        processing_jobs[job_id]["progress"] = 0
+        import traceback
+        processing_jobs[job_id]["error"] = traceback.format_exc()
+
+
+@router.post("/process", response_model=dict)
+async def upload_and_process(
+    file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None,
+    auto_process: bool = True
+):
+    """
+    一体化接口：上传文件并自动进行知识抽取和图谱构建。
+    
+    Args:
+        file: 上传的文件
+        auto_process: 是否自动处理（默认 True）
+        
+    Returns:
+        {
+            "documentId": "...",
+            "filename": "...",
+            "status": "uploaded" or "processing",
+            "jobId": "..." (if auto_process=True)
+        }
+    """
+    # Read file content
+    content = await file.read()
+    
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+    
+    # Determine document kind
+    kind = get_document_kind(file.filename)
+    if kind == "unknown":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unsupported file type: {Path(file.filename).suffix or 'unknown'}. "
+                f"Allowed types: {SUPPORTED_TYPES_LABEL}"
+            ),
+        )
+
+    validate_content_type(file.content_type)
+    
+    # Save file and get checksum
+    file_path, checksum = await storage.save_file(content, file.filename)
+    
+    # Check if document already exists (by checksum)
+    existing_docs = neo4j_client.execute_query(
+        "MATCH (d:Document {checksum: $checksum}) RETURN d.id as id LIMIT 1",
+        {"checksum": checksum}
+    )
+    
+    if existing_docs:
+        return {
+            "documentId": existing_docs[0]["id"],
+            "filename": file.filename,
+            "checksum": checksum,
+            "status": "duplicate",
+            "message": "文档已存在"
+        }
+    
+    # Create document ID
+    doc_id = f"doc_{uuid.uuid4().hex[:12]}"
+    
+    # Create document in Neo4j
+    neo4j_client.create_document(
+        doc_id=doc_id,
+        filename=file.filename,
+        checksum=checksum,
+        kind=kind,
+        size=len(content),
+        mime=file.content_type,
+        meta={"path": file_path}
+    )
+    
+    response = {
+        "documentId": doc_id,
+        "filename": file.filename,
+        "checksum": checksum,
+        "status": "uploaded",
+        "path": file_path
+    }
+    
+    # If auto_process is enabled, start background processing
+    if auto_process and background_tasks:
+        job_id = f"job_{uuid.uuid4().hex[:12]}"
+        processing_jobs[job_id] = {
+            "status": "queued",
+            "documentId": doc_id,
+            "progress": 0,
+            "message": "等待处理..."
+        }
+        
+        background_tasks.add_task(
+            process_document_background,
+            doc_id,
+            file_path,
+            kind,
+            job_id
+        )
+        
+        response["status"] = "processing"
+        response["jobId"] = job_id
+        response["message"] = "文档已上传，正在后台处理..."
+    
+    return response
+
+
+@router.get("/status/{job_id}")
+async def get_processing_status(job_id: str):
+    """
+    获取文档处理状态。
+    
+    Returns:
+        {
+            "status": "queued" | "processing" | "completed" | "failed",
+            "documentId": "...",
+            "progress": 0-100,
+            "message": "...",
+            "stats": {...} (if completed)
+        }
+    """
+    if job_id not in processing_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    return processing_jobs[job_id]
 

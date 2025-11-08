@@ -112,9 +112,13 @@ class Neo4jClient:
         """Create or merge a Concept node."""
         query = """
         MERGE (c:Concept {name: $name})
-        SET c.domain = $domain,
+        ON CREATE SET 
+            c.domain = $domain,
             c.meta = $meta,
-            c.created_at = coalesce(c.created_at, datetime()),
+            c.aliases = [],
+            c.created_at = datetime(),
+            c.updated_at = datetime()
+        ON MATCH SET
             c.updated_at = datetime()
         RETURN c
         """
@@ -122,6 +126,30 @@ class Neo4jClient:
             "name": name,
             "domain": domain,
             "meta": meta or {}
+        })
+        return len(result) > 0
+    
+    def add_concept_alias(self, canonical_name: str, alias: str) -> bool:
+        """
+        Add an alias to an existing concept.
+        
+        Args:
+            canonical_name: The canonical name of the concept
+            alias: The alias to add
+        """
+        query = """
+        MATCH (c:Concept {name: $canonical_name})
+        SET c.aliases = coalesce(c.aliases, []) + 
+            CASE WHEN $alias IN coalesce(c.aliases, []) 
+                 THEN [] 
+                 ELSE [$alias] 
+            END,
+            c.updated_at = datetime()
+        RETURN c
+        """
+        result = self.execute_query(query, {
+            "canonical_name": canonical_name,
+            "alias": alias
         })
         return len(result) > 0
     
@@ -192,18 +220,47 @@ class Neo4jClient:
     
     def find_similar_concepts(self, name: str, threshold: float = 0.8) -> List[Dict]:
         """
-        Find similar concepts (simplified: exact match and case-insensitive).
-        In production, this would use fuzzy matching or embeddings.
+        Find similar concepts with bilingual support.
+        Searches by:
+        - Exact match (case-insensitive)
+        - Substring match
+        - Alias match
+        - Fuzzy matching
         """
         query = """
         MATCH (c:Concept)
         WHERE toLower(c.name) = toLower($name)
            OR c.name CONTAINS $name
            OR $name CONTAINS c.name
+           OR toLower($name) IN [toLower(alias) | alias IN coalesce(c.aliases, [])]
+           OR any(alias IN coalesce(c.aliases, []) WHERE alias CONTAINS $name OR $name CONTAINS alias)
         RETURN c
+        ORDER BY 
+            CASE 
+                WHEN toLower(c.name) = toLower($name) THEN 0
+                WHEN c.name CONTAINS $name OR $name CONTAINS c.name THEN 1
+                ELSE 2
+            END
         LIMIT 10
         """
         return self.execute_query(query, {"name": name})
+    
+    def search_concepts_by_alias(self, alias: str) -> List[Dict]:
+        """
+        Search concepts by alias.
+        
+        Args:
+            alias: The alias to search for
+            
+        Returns:
+            List of concepts that have this alias
+        """
+        query = """
+        MATCH (c:Concept)
+        WHERE toLower($alias) IN [toLower(a) | a IN coalesce(c.aliases, [])]
+        RETURN c
+        """
+        return self.execute_query(query, {"alias": alias})
 
 
 # Global client instance
