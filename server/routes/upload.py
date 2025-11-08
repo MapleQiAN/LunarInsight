@@ -1,9 +1,11 @@
 """File upload routes."""
 import uuid
+import hashlib
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, BackgroundTasks
+from pydantic import BaseModel
 
 from infra.neo4j_client import neo4j_client
 from infra.storage import Storage
@@ -335,4 +337,268 @@ async def get_processing_status(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     
     return processing_jobs[job_id]
+
+
+# Pydantic models for text and URL uploads
+class TextUploadRequest(BaseModel):
+    """Request model for text content upload."""
+    content: str
+    title: Optional[str] = None
+    auto_process: bool = True
+
+
+class URLUploadRequest(BaseModel):
+    """Request model for URL content upload."""
+    url: str
+    title: Optional[str] = None
+    auto_process: bool = True
+
+
+@router.post("/text", response_model=dict)
+async def upload_text(
+    request: TextUploadRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    从文本内容创建文档并可选地自动处理。
+    
+    Args:
+        content: 文本内容
+        title: 文档标题（可选，默认使用前30个字符）
+        auto_process: 是否自动处理（默认 True）
+        
+    Returns:
+        {
+            "documentId": "...",
+            "filename": "...",
+            "status": "uploaded" or "processing",
+            "jobId": "..." (if auto_process=True)
+        }
+    """
+    content = request.content.strip()
+    
+    if not content:
+        raise HTTPException(status_code=400, detail="文本内容不能为空")
+    
+    # Generate title from content if not provided
+    title = request.title or content[:30].replace('\n', ' ') + "..."
+    filename = f"{title}.txt"
+    
+    # Calculate checksum
+    content_bytes = content.encode('utf-8')
+    checksum = hashlib.sha256(content_bytes).hexdigest()
+    
+    # Check if document already exists
+    existing_docs = neo4j_client.execute_query(
+        "MATCH (d:Document {checksum: $checksum}) RETURN d.id as id LIMIT 1",
+        {"checksum": checksum}
+    )
+    
+    if existing_docs:
+        return {
+            "documentId": existing_docs[0]["id"],
+            "filename": filename,
+            "checksum": checksum,
+            "status": "duplicate",
+            "message": "相同内容的文档已存在"
+        }
+    
+    # Save text as file
+    file_path, _ = await storage.save_file(content_bytes, filename)
+    
+    # Create document ID
+    doc_id = f"doc_{uuid.uuid4().hex[:12]}"
+    
+    # Create document in Neo4j
+    neo4j_client.create_document(
+        doc_id=doc_id,
+        filename=filename,
+        checksum=checksum,
+        kind="txt",
+        size=len(content_bytes),
+        mime="text/plain",
+        meta={"path": file_path, "source": "text_input"}
+    )
+    
+    response = {
+        "documentId": doc_id,
+        "filename": filename,
+        "checksum": checksum,
+        "status": "uploaded",
+        "path": file_path
+    }
+    
+    # Auto-process if enabled
+    if request.auto_process:
+        job_id = f"job_{uuid.uuid4().hex[:12]}"
+        processing_jobs[job_id] = {
+            "status": "queued",
+            "documentId": doc_id,
+            "progress": 0,
+            "message": "等待处理..."
+        }
+        
+        background_tasks.add_task(
+            process_document_background,
+            doc_id,
+            file_path,
+            "txt",
+            job_id
+        )
+        
+        response["status"] = "processing"
+        response["jobId"] = job_id
+        response["message"] = "文本已保存，正在后台处理..."
+    
+    return response
+
+
+@router.post("/url", response_model=dict)
+async def upload_url(
+    request: URLUploadRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    从网页URL抓取内容并创建文档。
+    
+    Args:
+        url: 网页链接
+        title: 文档标题（可选，默认使用URL）
+        auto_process: 是否自动处理（默认 True）
+        
+    Returns:
+        {
+            "documentId": "...",
+            "filename": "...",
+            "status": "uploaded" or "processing",
+            "jobId": "..." (if auto_process=True)
+        }
+    """
+    import httpx
+    from bs4 import BeautifulSoup
+    
+    url = request.url.strip()
+    
+    if not url:
+        raise HTTPException(status_code=400, detail="URL 不能为空")
+    
+    # Fetch webpage content
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            html_content = response.text
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"无法访问该网页: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"抓取网页时出错: {str(e)}"
+        )
+    
+    # Parse HTML and extract text
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        # Remove script and style elements
+        for script in soup(["script", "style", "nav", "footer", "header"]):
+            script.decompose()
+        
+        # Get page title
+        page_title = soup.title.string if soup.title else None
+        title = request.title or page_title or url
+        
+        # Extract text
+        text_content = soup.get_text(separator='\n', strip=True)
+        
+        # Clean up text
+        lines = [line.strip() for line in text_content.split('\n') if line.strip()]
+        content = '\n'.join(lines)
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"解析网页内容时出错: {str(e)}"
+        )
+    
+    if not content or len(content) < 50:
+        raise HTTPException(
+            status_code=400,
+            detail="网页内容过少或无法提取有效文本"
+        )
+    
+    # Generate filename
+    filename = f"{title[:50]}.txt"
+    
+    # Calculate checksum
+    content_bytes = content.encode('utf-8')
+    checksum = hashlib.sha256(content_bytes).hexdigest()
+    
+    # Check if document already exists
+    existing_docs = neo4j_client.execute_query(
+        "MATCH (d:Document {checksum: $checksum}) RETURN d.id as id LIMIT 1",
+        {"checksum": checksum}
+    )
+    
+    if existing_docs:
+        return {
+            "documentId": existing_docs[0]["id"],
+            "filename": filename,
+            "checksum": checksum,
+            "status": "duplicate",
+            "message": "相同内容的文档已存在"
+        }
+    
+    # Save content as file
+    file_path, _ = await storage.save_file(content_bytes, filename)
+    
+    # Create document ID
+    doc_id = f"doc_{uuid.uuid4().hex[:12]}"
+    
+    # Create document in Neo4j
+    neo4j_client.create_document(
+        doc_id=doc_id,
+        filename=filename,
+        checksum=checksum,
+        kind="txt",
+        size=len(content_bytes),
+        mime="text/plain",
+        meta={"path": file_path, "source": "url", "original_url": url}
+    )
+    
+    response = {
+        "documentId": doc_id,
+        "filename": filename,
+        "checksum": checksum,
+        "status": "uploaded",
+        "path": file_path,
+        "sourceUrl": url
+    }
+    
+    # Auto-process if enabled
+    if request.auto_process:
+        job_id = f"job_{uuid.uuid4().hex[:12]}"
+        processing_jobs[job_id] = {
+            "status": "queued",
+            "documentId": doc_id,
+            "progress": 0,
+            "message": "等待处理..."
+        }
+        
+        background_tasks.add_task(
+            process_document_background,
+            doc_id,
+            file_path,
+            "txt",
+            job_id
+        )
+        
+        response["status"] = "processing"
+        response["jobId"] = job_id
+        response["message"] = "网页内容已抓取，正在后台处理..."
+    
+    return response
 

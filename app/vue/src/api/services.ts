@@ -9,10 +9,14 @@ export interface DashboardStats {
 }
 
 export interface UploadResponse {
-  id: string
+  documentId: string
   filename: string
-  file_size: number
+  checksum: string
   status: string
+  jobId?: string
+  message?: string
+  path?: string
+  sourceUrl?: string
 }
 
 export interface IngestionResponse {
@@ -72,6 +76,12 @@ export const uploadFile = (file: File): Promise<UploadResponse> => {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
+
+export const uploadText = (content: string, title?: string, autoProcess: boolean = true): Promise<UploadResponse> => 
+  api.post('/uploads/text', { content, title, auto_process: autoProcess })
+
+export const uploadUrl = (url: string, title?: string, autoProcess: boolean = true): Promise<UploadResponse> => 
+  api.post('/uploads/url', { url, title, auto_process: autoProcess })
 
 export const startIngestion = (documentId: string): Promise<IngestionResponse> => 
   api.post(`/ingest/${documentId}`)

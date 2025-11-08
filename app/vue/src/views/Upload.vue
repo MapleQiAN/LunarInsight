@@ -4,78 +4,177 @@
     <div class="page-header">
       <div class="header-content">
         <h1 class="page-title">{{ t('upload.title') }}</h1>
-        <p class="page-subtitle">{{ t('upload.supported_formats') }}</p>
+        <p class="page-subtitle">支持文件上传、文本输入、网页链接</p>
       </div>
     </div>
 
     <n-space vertical :size="24">
-      <!-- Upload Card -->
+      <!-- Input Method Tabs -->
       <n-card class="upload-card" :bordered="false">
-        <div class="section-header">
-          <n-icon size="20"><cloud-upload-outline /></n-icon>
-          <h3>文件上传</h3>
-        </div>
-        <n-upload
-          :max="1"
-          :default-upload="false"
-          @change="handleFileChange"
-          :show-file-list="false"
-          accept=".pdf,.md,.markdown,.txt,.doc,.docx"
-        >
-          <n-upload-dragger class="enhanced-dragger">
-            <div class="dragger-content">
-              <div class="dragger-icon-wrapper">
-                <n-icon size="64" :component="CloudUploadOutline" class="dragger-icon" />
+        <n-tabs v-model:value="activeTab" type="segment" animated>
+          <!-- File Upload Tab -->
+          <n-tab-pane name="file" tab="文件上传">
+            <div class="tab-content">
+              <div class="section-header">
+                <n-icon size="20"><cloud-upload-outline /></n-icon>
+                <h3>上传文档文件</h3>
               </div>
-              <div class="dragger-text">
-                <h3>{{ t('upload.choose_file') }}</h3>
-                <p>{{ t('upload.drag_hint') }}</p>
-                <div class="dragger-formats">
-                  <n-tag :bordered="false" size="small" type="warning">PDF</n-tag>
-                  <n-tag :bordered="false" size="small" type="success">Markdown</n-tag>
-                  <n-tag :bordered="false" size="small" type="info">TXT</n-tag>
-                  <n-tag :bordered="false" size="small" type="error">Word</n-tag>
+              <n-upload
+                :max="1"
+                :default-upload="false"
+                @change="handleFileChange"
+                :show-file-list="false"
+                accept=".pdf,.md,.markdown,.txt,.doc,.docx"
+              >
+                <n-upload-dragger class="enhanced-dragger">
+                  <div class="dragger-content">
+                    <div class="dragger-icon-wrapper">
+                      <n-icon size="64" :component="CloudUploadOutline" class="dragger-icon" />
+                    </div>
+                    <div class="dragger-text">
+                      <h3>{{ t('upload.choose_file') }}</h3>
+                      <p>{{ t('upload.drag_hint') }}</p>
+                      <div class="dragger-formats">
+                        <n-tag :bordered="false" size="small" type="warning">PDF</n-tag>
+                        <n-tag :bordered="false" size="small" type="success">Markdown</n-tag>
+                        <n-tag :bordered="false" size="small" type="info">TXT</n-tag>
+                        <n-tag :bordered="false" size="small" type="error">Word</n-tag>
+                      </div>
+                    </div>
+                  </div>
+                </n-upload-dragger>
+              </n-upload>
+
+              <!-- File Info Card -->
+              <div v-if="selectedFile" class="file-selected-card">
+                <div class="file-preview">
+                  <div class="file-icon-wrapper">
+                    <n-icon size="40" :component="DocumentTextOutline" />
+                  </div>
+                  <div class="file-details">
+                    <div class="file-name">{{ selectedFile.name }}</div>
+                    <div class="file-meta">
+                      <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
+                      <n-divider vertical />
+                      <span class="file-type">{{ getFileType(selectedFile.name) }}</span>
+                    </div>
+                  </div>
+                  <n-button circle quaternary @click="removeFile">
+                    <template #icon>
+                      <n-icon :component="CloseOutline" />
+                    </template>
+                  </n-button>
                 </div>
+
+                <n-button
+                  type="primary"
+                  :loading="uploading"
+                  @click="handleUpload"
+                  block
+                  size="large"
+                  class="upload-button"
+                >
+                  <template #icon>
+                    <n-icon><rocket-outline /></n-icon>
+                  </template>
+                  {{ t('upload.upload_process') }}
+                </n-button>
               </div>
             </div>
-          </n-upload-dragger>
-        </n-upload>
+          </n-tab-pane>
 
-        <!-- File Info Card -->
-        <div v-if="selectedFile" class="file-selected-card">
-          <div class="file-preview">
-            <div class="file-icon-wrapper">
-              <n-icon size="40" :component="DocumentTextOutline" />
-            </div>
-            <div class="file-details">
-              <div class="file-name">{{ selectedFile.name }}</div>
-              <div class="file-meta">
-                <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
-                <n-divider vertical />
-                <span class="file-type">{{ getFileType(selectedFile.name) }}</span>
+          <!-- Text Input Tab -->
+          <n-tab-pane name="text" tab="文本输入">
+            <div class="tab-content">
+              <div class="section-header">
+                <n-icon size="20"><document-text-outline /></n-icon>
+                <h3>直接输入文本内容</h3>
               </div>
+              <n-form>
+                <n-form-item label="文档标题（可选）">
+                  <n-input
+                    v-model:value="textTitle"
+                    placeholder="为文档起个标题，留空则自动生成"
+                    :maxlength="100"
+                    show-count
+                  />
+                </n-form-item>
+                <n-form-item label="文本内容">
+                  <n-input
+                    v-model:value="textContent"
+                    type="textarea"
+                    placeholder="粘贴或输入文本内容（至少10个字符）..."
+                    :rows="12"
+                    :maxlength="100000"
+                    show-count
+                  />
+                </n-form-item>
+                <n-button
+                  type="primary"
+                  :loading="uploading"
+                  :disabled="!textContent || textContent.trim().length < 10"
+                  @click="handleTextUpload"
+                  block
+                  size="large"
+                  class="upload-button"
+                >
+                  <template #icon>
+                    <n-icon><rocket-outline /></n-icon>
+                  </template>
+                  提交文本并处理
+                </n-button>
+              </n-form>
             </div>
-            <n-button circle quaternary @click="removeFile">
-              <template #icon>
-                <n-icon :component="CloseOutline" />
-              </template>
-            </n-button>
-          </div>
+          </n-tab-pane>
 
-          <n-button
-            type="primary"
-            :loading="uploading"
-            @click="handleUpload"
-            block
-            size="large"
-            class="upload-button"
-          >
-            <template #icon>
-              <n-icon><rocket-outline /></n-icon>
-            </template>
-            {{ t('upload.upload_process') }}
-          </n-button>
-        </div>
+          <!-- URL Input Tab -->
+          <n-tab-pane name="url" tab="网页链接">
+            <div class="tab-content">
+              <div class="section-header">
+                <n-icon size="20"><globe-outline /></n-icon>
+                <h3>从网页抓取内容</h3>
+              </div>
+              <n-form>
+                <n-form-item label="网页链接">
+                  <n-input
+                    v-model:value="urlInput"
+                    placeholder="输入网页 URL，例如：https://example.com/article"
+                    :maxlength="2000"
+                  >
+                    <template #prefix>
+                      <n-icon :component="LinkOutline" />
+                    </template>
+                  </n-input>
+                </n-form-item>
+                <n-form-item label="文档标题（可选）">
+                  <n-input
+                    v-model:value="urlTitle"
+                    placeholder="为文档起个标题，留空则使用网页标题"
+                    :maxlength="100"
+                    show-count
+                  />
+                </n-form-item>
+                <n-alert type="info" style="margin-bottom: 16px">
+                  系统将自动抓取网页内容并提取文本，支持大部分公开网页
+                </n-alert>
+                <n-button
+                  type="primary"
+                  :loading="uploading"
+                  :disabled="!urlInput || !isValidUrl(urlInput)"
+                  @click="handleUrlUpload"
+                  block
+                  size="large"
+                  class="upload-button"
+                >
+                  <template #icon>
+                    <n-icon><rocket-outline /></n-icon>
+                  </template>
+                  抓取网页并处理
+                </n-button>
+              </n-form>
+            </div>
+          </n-tab-pane>
+        </n-tabs>
       </n-card>
 
       <!-- Success Card -->
@@ -173,15 +272,31 @@ import {
   TimeOutline,
   CheckmarkCircleOutline,
   CodeWorkingOutline,
-  AddCircleOutline
+  AddCircleOutline,
+  GlobeOutline,
+  LinkOutline
 } from '@vicons/ionicons5'
-import { uploadFile, startIngestion } from '@/api/services'
+import { uploadFile, uploadText, uploadUrl, startIngestion } from '@/api/services'
 
 const router = useRouter()
 const { t } = useI18n()
 const message = useMessage()
 
+// Tab state
+const activeTab = ref('file')
+
+// File upload state
 const selectedFile = ref(null)
+
+// Text input state
+const textContent = ref('')
+const textTitle = ref('')
+
+// URL input state
+const urlInput = ref('')
+const urlTitle = ref('')
+
+// Common state
 const uploading = ref(false)
 const ingesting = ref(false)
 const uploadResult = ref(null)
@@ -288,10 +403,103 @@ const handleIngestion = async () => {
   }
 }
 
+// URL validation
+const isValidUrl = (url) => {
+  try {
+    const urlObj = new URL(url)
+    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+// Text upload handler
+const handleTextUpload = async () => {
+  if (!textContent.value || textContent.value.trim().length < 10) {
+    message.error('文本内容至少需要10个字符')
+    return
+  }
+
+  uploading.value = true
+  try {
+    const result = await uploadText(
+      textContent.value,
+      textTitle.value || undefined,
+      true // auto_process
+    )
+    
+    uploadResult.value = result
+    
+    // Check if auto-processed
+    if (result.jobId) {
+      ingestionResult.value = {
+        jobId: result.jobId,
+        documentId: result.documentId
+      }
+      message.success('文本已提交并开始处理')
+    } else {
+      message.success('文本已保存')
+    }
+    
+    // Clear form
+    textContent.value = ''
+    textTitle.value = ''
+  } catch (error) {
+    console.error('Text upload failed:', error)
+    message.error(error.message || '文本提交失败')
+  } finally {
+    uploading.value = false
+  }
+}
+
+// URL upload handler
+const handleUrlUpload = async () => {
+  if (!urlInput.value || !isValidUrl(urlInput.value)) {
+    message.error('请输入有效的网页链接')
+    return
+  }
+
+  uploading.value = true
+  try {
+    const result = await uploadUrl(
+      urlInput.value,
+      urlTitle.value || undefined,
+      true // auto_process
+    )
+    
+    uploadResult.value = result
+    
+    // Check if auto-processed
+    if (result.jobId) {
+      ingestionResult.value = {
+        jobId: result.jobId,
+        documentId: result.documentId
+      }
+      message.success('网页内容已抓取并开始处理')
+    } else {
+      message.success('网页内容已保存')
+    }
+    
+    // Clear form
+    urlInput.value = ''
+    urlTitle.value = ''
+  } catch (error) {
+    console.error('URL upload failed:', error)
+    message.error(error.message || '网页抓取失败')
+  } finally {
+    uploading.value = false
+  }
+}
+
 const resetUpload = () => {
   selectedFile.value = null
+  textContent.value = ''
+  textTitle.value = ''
+  urlInput.value = ''
+  urlTitle.value = ''
   uploadResult.value = null
   ingestionResult.value = null
+  activeTab.value = 'file'
 }
 </script>
 
@@ -407,6 +615,10 @@ const resetUpload = () => {
         0 12px 40px rgba(0, 0, 0, 0.08),
         0 4px 16px rgba(0, 0, 0, 0.06);
       transform: translateY(-2px);
+    }
+
+    .tab-content {
+      padding: 20px 0;
     }
   }
 
