@@ -41,6 +41,8 @@ data/
 uploads/
 *.db
 *.sqlite
+docs/
+scripts/
 
 # Logs
 *.log
