@@ -19,6 +19,7 @@
 
 ### 2) Key Features
 - **Evidence‑bound graph**: each triple carries `evidence` + `source_id` + `offset`.
+- **AI-Powered Analysis**: intelligent document segmentation with deep semantic understanding, rich concept extraction, and knowledge insights generation.
 - **Clean separation**: Extension = capture; Backend = extraction/linking; Frontend = visualization & QA via API.
 - **Two tracks**: Streamlit MVP → Vue 3 + Element Plus + Cytoscape.js product UI.
 - **Privacy by default**: minimal capture, local‑first, JWT + RBAC, export read‑only subgraphs.
@@ -53,11 +54,12 @@ flowchart LR
 - **Echo (悟听)**: capture extension (MV3, IndexedDB queue)
 
 ### 5) Tech Stack
-- **Frontend**: Vue 3, Vite, Element Plus, Cytoscape.js, ECharts (MVP alt: Streamlit)
+- **Frontend**: Vue 3, Vite, Naive UI, Cytoscape.js, ECharts (MVP alt: Streamlit)
 - **Backend**: FastAPI, RQ/Celery, pydantic
 - **Graph**: Neo4j 5.x (Bolt)
 - **Vector**: pgvector or FAISS
 - **Queue/Cache**: Redis
+- **AI**: Multi-provider support (OpenAI, Anthropic, Google, DeepSeek, Qwen, GLM, Kimi, Ernie, MiniMax, Doubao, Ollama)
 - **Observability**: OpenTelemetry, Prometheus
 
 ### 6) Quickstart (Docker, Dev)
@@ -76,6 +78,8 @@ services:
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
       - NEO4J_PASS=test
+      - AI_PROVIDER=openai  # or anthropic, deepseek, qwen, ollama, etc.
+      - AI_API_KEY=your-api-key
       - VECTOR_BACKEND=pgvector
       - JWT_SECRET=devsecret
     depends_on: [neo4j]
@@ -85,6 +89,8 @@ services:
     depends_on: [api]
     ports: ["3000:3000"]
 ```
+
+**AI Configuration**: See [AI Providers Guide](docs/AI_PROVIDERS.md) for detailed setup instructions for all 12 supported AI providers.
 
 ### 7) API Glance
 - `POST /ingest` batch capture (id/hash‑idempotent)
@@ -129,7 +135,8 @@ Minimal capture (no forms/cookies), local‑first, TLS, encrypted backups, JWT +
 - **追溯**：每条结论都可回跳到来源与文本偏移。  
 
 ### 2）核心特性
-- **证据绑定**：三元组携带 `evidence + source_id + offset`。  
+- **证据绑定**：三元组携带 `evidence + source_id + offset`。
+- **AI 智能分析**：智能文档分词，深度语义理解，丰富概念抽取，知识洞察生成。支持用户自定义 Prompt 和自动优化。
 - **职责清晰**：插件只采集；后端抽取/入图/检索；前端仅通过 API 呈现。  
 - **双轨实现**：Streamlit MVP → Next.js + Cytoscape.js 产品化。  
 - **隐私优先**：最小采集、本地优先、JWT + RBAC、只读子图导出。  
@@ -164,10 +171,12 @@ flowchart LR
 - **月悟·听（Echo）**：采集扩展（MV3，IndexedDB 队列）  
 
 ### 5）技术栈
-前端 Vue 3 + Vite + Element Plus + Cytoscape.js + ECharts；后端 FastAPI + RQ/Celery；图 Neo4j；向量 pgvector/FAISS；队列 Redis；可观测性 OpenTelemetry/Prometheus。
+前端 Vue 3 + Vite + Naive UI + Cytoscape.js + ECharts；后端 FastAPI + RQ/Celery；图 Neo4j；向量 pgvector/FAISS；队列 Redis；AI 多提供商支持（OpenAI、Anthropic、Google、DeepSeek、通义千问、智谱、Kimi、文心、MiniMax、豆包、Ollama）；可观测性 OpenTelemetry/Prometheus。
 
 ### 6）快速开始（Docker，开发）
 > 同上方 English 的 `docker-compose` 示例。
+
+**AI 配置**：查看 [AI 提供商配置指南](docs/AI_PROVIDERS.md) 了解所有 12 个支持的 AI 提供商的详细配置说明。
 
 ### 7）API 速览
 - `POST /ingest` 批量采集（id/hash 幂等）  
@@ -195,6 +204,43 @@ flowchart LR
 
 ## License
 Apache‑2.0 (suggested). See `LICENSE` when added.
+
+## New: AI Intelligent Segmentation
+
+🎉 **LunarInsight now supports AI-powered intelligent document analysis!**
+
+Instead of just converting text to JSON triplets, the AI mode:
+- 🧠 **Deep semantic understanding** - AI truly understands document content
+- 💎 **Rich concept extraction** - Extracts descriptions, categories, domains, importance levels
+- 🔗 **Semantic relationships** - Identifies causal, containment, comparison relationships
+- 💡 **Knowledge insights** - Generates deep understanding and insights
+- 🎯 **Custom prompts** - Users can specify analysis focus
+- ⚡ **Auto prompt optimization** - AI automatically optimizes user prompts
+
+### Quick Start
+
+```bash
+# Set API key
+export OPENAI_API_KEY="sk-..."
+
+# Upload with AI analysis
+curl -X POST "http://localhost:8000/uploads/text" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Your document content...",
+    "enable_ai_segmentation": true,
+    "user_prompt": "Focus on technical architecture and design patterns"
+  }'
+```
+
+### Documentation
+
+- 📖 [Complete API Guide](docs/AI_SEGMENTATION_API.md)
+- 🚀 [Quick Start Guide](README_AI_SEGMENTATION.md)
+- 💻 [Example Code](examples/ai_segmentation_example.py)
+- 📝 [Implementation Summary](IMPLEMENTATION_SUMMARY.md)
+
+---
 
 ## Contributing
 Issues and PRs are welcome. Please open discussions for API/Schema changes first.
