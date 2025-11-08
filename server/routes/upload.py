@@ -15,6 +15,7 @@ from services.linker import EntityLinker
 from services.graph_service import GraphService
 from services.ai_segmenter import AISegmenter
 from models.document import AIExtractionRequest
+from infra.queue import get_queue
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
@@ -30,7 +31,10 @@ except ValueError as e:
     ai_segmenter = None
     print(f"⚠️  AI segmentation disabled: {str(e)}")
 
-# Job storage for tracking processing status
+# Initialize Redis queue
+queue = get_queue()
+
+# Fallback job storage (used when Redis is not available)
 processing_jobs = {}
 
 ALLOWED_EXTENSIONS = {
@@ -163,6 +167,56 @@ async def get_document(document_id: str):
     return doc_data
 
 
+def _update_upload_status(job_id: str, status: str, progress: int, message: str, **kwargs):
+    """Update job status (supports both Redis and fallback storage)."""
+    # Try to update via RQ if we're in a worker context
+    if queue.is_connected():
+        try:
+            from rq import get_current_job
+            current_job = get_current_job()
+            if current_job:
+                # We're in a worker, update current job
+                meta = current_job.meta or {}
+                meta.update({
+                    "status": status,
+                    "progress": progress,
+                    "message": message,
+                    **kwargs
+                })
+                current_job.meta = meta
+                current_job.save()
+                return
+        except Exception:
+            pass
+        
+        # Not in worker context, try to fetch job by ID
+        try:
+            job = queue.get_job(job_id)
+            if job:
+                meta = job.meta or {}
+                meta.update({
+                    "status": status,
+                    "progress": progress,
+                    "message": message,
+                    **kwargs
+                })
+                job.meta = meta
+                job.save()
+                return
+        except Exception:
+            pass
+    
+    # Fallback to in-memory storage
+    if job_id not in processing_jobs:
+        processing_jobs[job_id] = {}
+    processing_jobs[job_id].update({
+        "status": status,
+        "progress": progress,
+        "message": message,
+        **kwargs
+    })
+
+
 def process_document_background(
     doc_id: str, 
     file_path: str, 
@@ -186,12 +240,7 @@ def process_document_background(
         user_prompt: User-defined analysis prompt
         optimize_prompt: Whether to optimize user prompt with AI
     """
-    processing_jobs[job_id] = {
-        "status": "processing",
-        "documentId": doc_id,
-        "progress": 0,
-        "message": "开始处理文档..."
-    }
+    _update_upload_status(job_id, "processing", 0, "开始处理文档...", documentId=doc_id)
     
     try:
         print(f"\n{'#'*80}")
@@ -207,8 +256,7 @@ def process_document_background(
         print(f"{'#'*80}\n")
         
         # Step 1: Parse document
-        processing_jobs[job_id]["message"] = "正在解析文档..."
-        processing_jobs[job_id]["progress"] = 10
+        _update_upload_status(job_id, "processing", 10, "正在解析文档...", documentId=doc_id)
         
         print(f"📖 [步骤1] 解析文档 (chunk_size={chunk_size})...")
         parser = ParserFactory.create_parser(kind, chunk_size=chunk_size)
@@ -225,8 +273,7 @@ def process_document_background(
             # Step 1.5: Optimize user prompt if provided
             final_prompt = None
             if user_prompt:
-                processing_jobs[job_id]["message"] = "正在优化分析提示词..."
-                processing_jobs[job_id]["progress"] = 15
+                _update_upload_status(job_id, "processing", 15, "正在优化分析提示词...", documentId=doc_id)
                 
                 if optimize_prompt:
                     print(f"🔧 [Prompt优化] 优化用户提示词...")
@@ -236,8 +283,7 @@ def process_document_background(
                     print(f"📝 [Prompt] 使用原始用户提示词")
             
             # Step 2: Analyze document structure
-            processing_jobs[job_id]["message"] = "正在分析文档结构..."
-            processing_jobs[job_id]["progress"] = 20
+            _update_upload_status(job_id, "processing", 20, "正在分析文档结构...", documentId=doc_id)
             
             print(f"\n🔍 [文档分析] 分析文档整体结构...")
             doc_context = ai_segmenter.analyze_document_structure(chunks, final_prompt)
@@ -247,8 +293,7 @@ def process_document_background(
             print(f"   - 关键概念: {', '.join(doc_context.get('key_concepts', [])[:5])}...")
             
             # Step 3: Extract rich knowledge from each chunk
-            processing_jobs[job_id]["message"] = "正在进行深度知识抽取..."
-            processing_jobs[job_id]["progress"] = 30
+            _update_upload_status(job_id, "processing", 30, "正在进行深度知识抽取...", documentId=doc_id)
             
             print(f"\n💎 [深度抽取] 开始智能知识抽取 (共 {len(chunks)} 个文本块)...")
             all_triplets = []
@@ -273,8 +318,8 @@ def process_document_background(
                 
                 print(f"   ✓ 提取: {len(triplets)} 个关系, {len(concepts)} 个概念, {len(insights)} 个洞察")
                 
-                processing_jobs[job_id]["progress"] = 30 + int((i / len(chunks)) * 40)
-                processing_jobs[job_id]["message"] = f"AI深度分析中... ({i}/{len(chunks)})"
+                progress = 30 + int((i / len(chunks)) * 40)
+                _update_upload_status(job_id, "processing", progress, f"AI深度分析中... ({i}/{len(chunks)})", documentId=doc_id)
             
             print(f"\n📊 [深度抽取] 完成:")
             print(f"   - 总关系数: {len(all_triplets)}")
@@ -282,23 +327,20 @@ def process_document_background(
             print(f"   - 总洞察数: {len(all_insights)}")
             
             # Step 4: Ingest rich concepts first
-            processing_jobs[job_id]["message"] = "正在构建丰富概念..."
-            processing_jobs[job_id]["progress"] = 75
+            _update_upload_status(job_id, "processing", 75, "正在构建丰富概念...", documentId=doc_id)
             
             print(f"\n💎 [概念构建] 写入丰富概念信息...")
             graph_service.ingest_rich_concepts(doc_id, all_concepts)
             
             # Step 5: Link and merge entities
-            processing_jobs[job_id]["message"] = "正在链接实体..."
-            processing_jobs[job_id]["progress"] = 80
+            _update_upload_status(job_id, "processing", 80, "正在链接实体...", documentId=doc_id)
             
             print(f"\n🔗 [实体链接] 开始实体链接和合并...")
             linked_triplets = linker.link_and_merge(all_triplets)
             print(f"✅ [实体链接] 完成: {len(linked_triplets)} 个三元组")
             
             # Step 6: Ingest triplets
-            processing_jobs[job_id]["message"] = "正在构建知识图谱..."
-            processing_jobs[job_id]["progress"] = 90
+            _update_upload_status(job_id, "processing", 90, "正在构建知识图谱...", documentId=doc_id)
             
             print(f"\n💾 [图谱构建] 开始构建知识图谱...")
             graph_service.ingest_triplets(doc_id, linked_triplets)
@@ -320,10 +362,7 @@ def process_document_background(
                     print(f"   • {insight}")
             print(f"{'#'*80}\n")
             
-            processing_jobs[job_id]["status"] = "completed"
-            processing_jobs[job_id]["progress"] = 100
-            processing_jobs[job_id]["message"] = "AI智能分析完成！"
-            processing_jobs[job_id]["stats"] = {
+            stats = {
                 "chunks": len(chunks),
                 "triplets": len(linked_triplets),
                 "concepts": len(concept_names),
@@ -331,13 +370,15 @@ def process_document_background(
                 "textLength": len(full_text),
                 "mode": "ai_segmentation"
             }
+            result_data = {"stats": stats}
             if all_insights:
-                processing_jobs[job_id]["insights"] = all_insights[:10]  # 返回前10条洞察
+                result_data["insights"] = all_insights[:10]  # 返回前10条洞察
+            
+            _update_upload_status(job_id, "completed", 100, "AI智能分析完成！", documentId=doc_id, **result_data)
         
         else:
             # 传统模式
-            processing_jobs[job_id]["message"] = f"已提取 {len(chunks)} 个文本块，正在进行知识抽取..."
-            processing_jobs[job_id]["progress"] = 30
+            _update_upload_status(job_id, "processing", 30, f"已提取 {len(chunks)} 个文本块，正在进行知识抽取...", documentId=doc_id)
             
             # Step 2: Extract triplets using AI
             print(f"\n🤖 [步骤2] 开始知识抽取 (共 {len(chunks)} 个文本块)...")
@@ -349,24 +390,22 @@ def process_document_background(
                 triplets = extractor.extract(chunk)
                 all_triplets.extend(triplets)
                 chunk_triplet_counts.append(len(triplets))
-                processing_jobs[job_id]["progress"] = 30 + int((i / len(chunks)) * 40)
-                processing_jobs[job_id]["message"] = f"正在抽取知识... ({i}/{len(chunks)})"
+                progress = 30 + int((i / len(chunks)) * 40)
+                _update_upload_status(job_id, "processing", progress, f"正在抽取知识... ({i}/{len(chunks)})", documentId=doc_id)
             
             print(f"\n📊 [步骤2] 知识抽取完成:")
             print(f"   - 总三元组数: {len(all_triplets)}")
             print(f"   - 各文本块三元组数: {chunk_triplet_counts}")
             print(f"   - 平均每个文本块: {len(all_triplets) / len(chunks) if chunks else 0:.2f} 个三元组")
             
-            processing_jobs[job_id]["message"] = f"已抽取 {len(all_triplets)} 个知识三元组，正在链接实体..."
-            processing_jobs[job_id]["progress"] = 70
+            _update_upload_status(job_id, "processing", 70, f"已抽取 {len(all_triplets)} 个知识三元组，正在链接实体...", documentId=doc_id)
             
             # Step 3: Link and merge entities
             print(f"\n🔗 [步骤3] 开始实体链接和合并...")
             linked_triplets = linker.link_and_merge(all_triplets)
             print(f"✅ [步骤3] 实体链接完成: {len(linked_triplets)} 个三元组")
             
-            processing_jobs[job_id]["message"] = "正在构建知识图谱..."
-            processing_jobs[job_id]["progress"] = 85
+            _update_upload_status(job_id, "processing", 85, "正在构建知识图谱...", documentId=doc_id)
             
             # Step 4: Ingest into Neo4j
             print(f"\n💾 [步骤4] 开始构建知识图谱...")
@@ -384,16 +423,14 @@ def process_document_background(
             print(f"   - 文本总长度: {len(full_text)} 字符")
             print(f"{'#'*80}\n")
             
-            processing_jobs[job_id]["status"] = "completed"
-            processing_jobs[job_id]["progress"] = 100
-            processing_jobs[job_id]["message"] = "知识图谱构建完成！"
-            processing_jobs[job_id]["stats"] = {
+            stats = {
                 "chunks": len(chunks),
                 "triplets": len(linked_triplets),
                 "concepts": len(concept_names),
                 "textLength": len(full_text),
                 "mode": "traditional"
             }
+            _update_upload_status(job_id, "completed", 100, "知识图谱构建完成！", documentId=doc_id, stats=stats)
         
     except Exception as e:
         print(f"\n{'#'*80}")
@@ -404,10 +441,7 @@ def process_document_background(
         print(f"   - 错误详情:\n{error_trace}")
         print(f"{'#'*80}\n")
         
-        processing_jobs[job_id]["status"] = "failed"
-        processing_jobs[job_id]["message"] = f"处理失败: {str(e)}"
-        processing_jobs[job_id]["progress"] = 0
-        processing_jobs[job_id]["error"] = error_trace
+        _update_upload_status(job_id, "failed", 0, f"处理失败: {str(e)}", documentId=doc_id, error=error_trace)
 
 
 @router.post("/process", response_model=dict)
@@ -513,12 +547,38 @@ async def upload_and_process(
     # If auto_process is enabled, start background processing
     if auto_process and background_tasks:
         job_id = f"job_{uuid.uuid4().hex[:12]}"
-        processing_jobs[job_id] = {
-            "status": "queued",
-            "documentId": doc_id,
-            "progress": 0,
-            "message": "等待处理..."
-        }
+        
+        # Try to use RQ queue if available
+        if queue.is_connected():
+            job = queue.enqueue(
+                process_document_background,
+                doc_id,
+                file_path,
+                kind,
+                job_id,
+                chunk_size,
+                enable_ai_segmentation,
+                user_prompt,
+                optimize_prompt,
+                job_timeout='1h'
+            )
+            
+            if job:
+                # Initialize job metadata
+                job.meta = {
+                    "status": "queued",
+                    "documentId": doc_id,
+                    "progress": 0,
+                    "message": "等待处理..."
+                }
+                job.save()
+                response["status"] = "processing"
+                response["jobId"] = job.id
+                response["message"] = "文档已上传，正在后台处理..."
+                return response
+        
+        # Fallback to BackgroundTasks if Redis is not available
+        _update_upload_status(job_id, "queued", 0, "等待处理...", documentId=doc_id)
         
         background_tasks.add_task(
             process_document_background,
@@ -553,6 +613,13 @@ async def get_processing_status(job_id: str):
             "stats": {...} (if completed)
         }
     """
+    # Try to get status from Redis first
+    if queue.is_connected():
+        status = queue.get_job_status(job_id)
+        if status.get("status") != "not_found":
+            return status
+    
+    # Fallback to in-memory storage
     if job_id not in processing_jobs:
         raise HTTPException(status_code=404, detail="Job not found")
     
@@ -677,12 +744,38 @@ async def upload_text(
     # Auto-process if enabled
     if request.auto_process:
         job_id = f"job_{uuid.uuid4().hex[:12]}"
-        processing_jobs[job_id] = {
-            "status": "queued",
-            "documentId": doc_id,
-            "progress": 0,
-            "message": "等待处理..."
-        }
+        
+        # Try to use RQ queue if available
+        if queue.is_connected():
+            job = queue.enqueue(
+                process_document_background,
+                doc_id,
+                file_path,
+                "txt",
+                job_id,
+                chunk_size,
+                request.enable_ai_segmentation,
+                request.user_prompt,
+                request.optimize_prompt,
+                job_timeout='1h'
+            )
+            
+            if job:
+                # Initialize job metadata
+                job.meta = {
+                    "status": "queued",
+                    "documentId": doc_id,
+                    "progress": 0,
+                    "message": "等待处理..."
+                }
+                job.save()
+                response["status"] = "processing"
+                response["jobId"] = job.id
+                response["message"] = "文本已保存，正在后台处理..."
+                return response
+        
+        # Fallback to BackgroundTasks if Redis is not available
+        _update_upload_status(job_id, "queued", 0, "等待处理...", documentId=doc_id)
         
         background_tasks.add_task(
             process_document_background,
@@ -848,12 +941,38 @@ async def upload_url(
     # Auto-process if enabled
     if request.auto_process:
         job_id = f"job_{uuid.uuid4().hex[:12]}"
-        processing_jobs[job_id] = {
-            "status": "queued",
-            "documentId": doc_id,
-            "progress": 0,
-            "message": "等待处理..."
-        }
+        
+        # Try to use RQ queue if available
+        if queue.is_connected():
+            job = queue.enqueue(
+                process_document_background,
+                doc_id,
+                file_path,
+                "txt",
+                job_id,
+                chunk_size,
+                request.enable_ai_segmentation,
+                request.user_prompt,
+                request.optimize_prompt,
+                job_timeout='1h'
+            )
+            
+            if job:
+                # Initialize job metadata
+                job.meta = {
+                    "status": "queued",
+                    "documentId": doc_id,
+                    "progress": 0,
+                    "message": "等待处理..."
+                }
+                job.save()
+                response["status"] = "processing"
+                response["jobId"] = job.id
+                response["message"] = "网页内容已抓取，正在后台处理..."
+                return response
+        
+        # Fallback to BackgroundTasks if Redis is not available
+        _update_upload_status(job_id, "queued", 0, "等待处理...", documentId=doc_id)
         
         background_tasks.add_task(
             process_document_background,

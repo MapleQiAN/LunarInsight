@@ -11,6 +11,7 @@ from services.extractor import TripletExtractor
 from services.linker import EntityLinker
 from services.graph_service import GraphService
 from services.ai_segmenter import AISegmenter
+from infra.queue import get_queue, update_job_progress
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -25,8 +26,61 @@ try:
 except ValueError:
     ai_segmenter = None
 
-# Simple job storage (in production, use Redis/RQ)
+# Initialize Redis queue
+queue = get_queue()
+
+# Fallback job storage (used when Redis is not available)
 jobs: Dict[str, Dict] = {}
+
+
+def _update_status(job_id: str, status: str, progress: int, message: str, **kwargs):
+    """Update job status (supports both Redis and fallback storage)."""
+    # Try to update via RQ if we're in a worker context
+    if queue.is_connected():
+        try:
+            from rq import get_current_job
+            current_job = get_current_job()
+            if current_job:
+                # We're in a worker, update current job
+                meta = current_job.meta or {}
+                meta.update({
+                    "status": status,
+                    "progress": progress,
+                    "message": message,
+                    **kwargs
+                })
+                current_job.meta = meta
+                current_job.save()
+                return
+        except Exception:
+            pass
+        
+        # Not in worker context, try to fetch job by ID
+        try:
+            job = queue.get_job(job_id)
+            if job:
+                meta = job.meta or {}
+                meta.update({
+                    "status": status,
+                    "progress": progress,
+                    "message": message,
+                    **kwargs
+                })
+                job.meta = meta
+                job.save()
+                return
+        except Exception:
+            pass
+    
+    # Fallback to in-memory storage
+    if job_id not in jobs:
+        jobs[job_id] = {}
+    jobs[job_id].update({
+        "status": status,
+        "progress": progress,
+        "message": message,
+        **kwargs
+    })
 
 
 def process_document(
@@ -52,17 +106,11 @@ def process_document(
         user_prompt: User-defined analysis prompt
         optimize_prompt: Whether to optimize user prompt with AI
     """
-    jobs[job_id] = {
-        "status": "processing",
-        "documentId": doc_id,
-        "progress": 0,
-        "message": "Starting parsing..."
-    }
+    _update_status(job_id, "processing", 0, "Starting parsing...", documentId=doc_id)
     
     try:
         # Parse document
-        jobs[job_id]["message"] = "Parsing document..."
-        jobs[job_id]["progress"] = 10
+        _update_status(job_id, "processing", 10, "Parsing document...", documentId=doc_id)
         
         parser = ParserFactory.create_parser(kind, chunk_size=chunk_size)
         full_text, chunks = parser.parse(file_path)
@@ -72,8 +120,7 @@ def process_document(
             # Optimize user prompt if provided
             final_prompt = None
             if user_prompt:
-                jobs[job_id]["message"] = "Optimizing prompt..."
-                jobs[job_id]["progress"] = 15
+                _update_status(job_id, "processing", 15, "Optimizing prompt...", documentId=doc_id)
                 
                 if optimize_prompt:
                     final_prompt = ai_segmenter.optimize_user_prompt(user_prompt)
@@ -81,14 +128,12 @@ def process_document(
                     final_prompt = user_prompt
             
             # Analyze document structure
-            jobs[job_id]["message"] = "Analyzing document structure..."
-            jobs[job_id]["progress"] = 20
+            _update_status(job_id, "processing", 20, "Analyzing document structure...", documentId=doc_id)
             
             doc_context = ai_segmenter.analyze_document_structure(chunks, final_prompt)
             
             # Extract rich knowledge from each chunk
-            jobs[job_id]["message"] = "Extracting rich knowledge..."
-            jobs[job_id]["progress"] = 30
+            _update_status(job_id, "processing", 30, "Extracting rich knowledge...", documentId=doc_id)
             
             all_triplets = []
             all_concepts = []
@@ -101,79 +146,72 @@ def process_document(
                 all_concepts.extend(knowledge.get("concepts", []))
                 all_insights.extend(knowledge.get("insights", []))
                 
-                jobs[job_id]["progress"] = 30 + int((i / len(chunks)) * 40)
-                jobs[job_id]["message"] = f"AI analyzing... ({i}/{len(chunks)})"
+                progress = 30 + int((i / len(chunks)) * 40)
+                _update_status(job_id, "processing", progress, f"AI analyzing... ({i}/{len(chunks)})", documentId=doc_id)
             
             # Ingest rich concepts first
-            jobs[job_id]["message"] = "Ingesting rich concepts..."
-            jobs[job_id]["progress"] = 75
+            _update_status(job_id, "processing", 75, "Ingesting rich concepts...", documentId=doc_id)
             
             graph_service.ingest_rich_concepts(doc_id, all_concepts)
             
             # Link and merge entities
-            jobs[job_id]["message"] = "Linking entities..."
-            jobs[job_id]["progress"] = 80
+            _update_status(job_id, "processing", 80, "Linking entities...", documentId=doc_id)
             
             linked_triplets = linker.link_and_merge(all_triplets)
             
             # Ingest triplets
-            jobs[job_id]["message"] = "Ingesting into graph..."
-            jobs[job_id]["progress"] = 90
+            _update_status(job_id, "processing", 90, "Ingesting into graph...", documentId=doc_id)
             
             graph_service.ingest_triplets(doc_id, linked_triplets)
             
             concept_names = set(c["name"] for c in all_concepts)
             
-            jobs[job_id]["status"] = "completed"
-            jobs[job_id]["progress"] = 100
-            jobs[job_id]["message"] = "AI analysis completed!"
-            jobs[job_id]["stats"] = {
+            stats = {
                 "chunks": len(chunks),
                 "triplets": len(linked_triplets),
                 "concepts": len(concept_names),
                 "insights": len(all_insights),
                 "mode": "ai_segmentation"
             }
+            
+            result_data = {"stats": stats}
             if all_insights:
-                jobs[job_id]["insights"] = all_insights[:10]
+                result_data["insights"] = all_insights[:10]
+            
+            _update_status(job_id, "completed", 100, "AI analysis completed!", documentId=doc_id, **result_data)
         
         else:
             # 传统模式
-            jobs[job_id]["message"] = f"Extracted {len(chunks)} chunks. Extracting triplets..."
-            jobs[job_id]["progress"] = 30
+            _update_status(job_id, "processing", 30, f"Extracted {len(chunks)} chunks. Extracting triplets...", documentId=doc_id)
             
             all_triplets = []
             for i, chunk in enumerate(chunks):
                 triplets = extractor.extract(chunk)
                 all_triplets.extend(triplets)
-                jobs[job_id]["progress"] = 30 + int((i + 1) / len(chunks) * 40)
+                progress = 30 + int((i + 1) / len(chunks) * 40)
+                _update_status(job_id, "processing", progress, f"Extracting triplets... ({i + 1}/{len(chunks)})", documentId=doc_id)
             
-            jobs[job_id]["message"] = f"Extracted {len(all_triplets)} triplets. Linking entities..."
-            jobs[job_id]["progress"] = 70
+            _update_status(job_id, "processing", 70, f"Extracted {len(all_triplets)} triplets. Linking entities...", documentId=doc_id)
             
             linked_triplets = linker.link_and_merge(all_triplets)
             
-            jobs[job_id]["message"] = "Ingesting into graph..."
-            jobs[job_id]["progress"] = 90
+            _update_status(job_id, "processing", 90, "Ingesting into graph...", documentId=doc_id)
             
             graph_service.ingest_triplets(doc_id, linked_triplets)
             
-            jobs[job_id]["status"] = "completed"
-            jobs[job_id]["progress"] = 100
-            jobs[job_id]["message"] = f"Successfully processed {len(linked_triplets)} triplets"
-            jobs[job_id]["stats"] = {
+            stats = {
                 "chunks": len(chunks),
                 "triplets": len(linked_triplets),
                 "concepts": len(set(t.subject for t in linked_triplets) | set(t.object for t in linked_triplets)),
                 "mode": "traditional"
             }
+            
+            _update_status(job_id, "completed", 100, f"Successfully processed {len(linked_triplets)} triplets", documentId=doc_id, stats=stats)
         
     except Exception as e:
-        jobs[job_id]["status"] = "failed"
-        jobs[job_id]["message"] = f"Error: {str(e)}"
-        jobs[job_id]["progress"] = 0
         import traceback
-        jobs[job_id]["error"] = traceback.format_exc()
+        error_trace = traceback.format_exc()
+        _update_status(job_id, "failed", 0, f"Error: {str(e)}", documentId=doc_id, error=error_trace)
 
 
 @router.post("/{document_id}")
@@ -242,14 +280,40 @@ async def ingest_document(
     
     # Create job ID first
     job_id = f"job_{uuid.uuid4().hex[:12]}"
-    jobs[job_id] = {
-        "status": "queued",
-        "documentId": document_id,
-        "progress": 0,
-        "message": "Queued for processing"
-    }
     
-    # Start background processing
+    # Try to use RQ queue if available
+    if queue.is_connected():
+        job = queue.enqueue(
+            process_document,
+            document_id,
+            str(file_path),
+            kind,
+            job_id,
+            chunk_size,
+            enable_ai_segmentation,
+            user_prompt,
+            optimize_prompt,
+            job_timeout='1h'
+        )
+        
+        if job:
+            # Initialize job metadata
+            job.meta = {
+                "status": "queued",
+                "documentId": document_id,
+                "progress": 0,
+                "message": "Queued for processing"
+            }
+            job.save()
+            return {
+                "jobId": job.id,
+                "documentId": document_id,
+                "status": "queued"
+            }
+    
+    # Fallback to BackgroundTasks if Redis is not available
+    _update_status(job_id, "queued", 0, "Queued for processing", documentId=document_id)
+    
     background_tasks.add_task(
         process_document, 
         document_id, 
@@ -272,6 +336,13 @@ async def ingest_document(
 @router.get("/status/{job_id}")
 async def get_ingest_status(job_id: str):
     """Get ingestion job status."""
+    # Try to get status from Redis first
+    if queue.is_connected():
+        status = queue.get_job_status(job_id)
+        if status.get("status") != "not_found":
+            return status
+    
+    # Fallback to in-memory storage
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
     
