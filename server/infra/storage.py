@@ -37,7 +37,7 @@ class Storage:
         async with aiofiles.open(file_path, 'wb') as f:
             await f.write(file_content)
         
-        return str(file_path.relative_to(Path.cwd())), checksum
+        return str(file_path.resolve().relative_to(Path.cwd())), checksum
     
     def calculate_checksum(self, file_path: str) -> str:
         """Calculate SHA256 checksum of a file."""
