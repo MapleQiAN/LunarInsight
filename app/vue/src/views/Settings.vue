@@ -27,7 +27,7 @@
           </n-form-item>
 
           <!-- Current Provider Info -->
-          <n-alert 
+          <!-- <n-alert 
             v-if="currentProvider" 
             type="info" 
             style="margin-bottom: 16px"
@@ -49,12 +49,12 @@
                 <n-tag type="warning" size="small">{{ t('settings.api_key_required_tag') }}</n-tag>
               </div>
             </n-space>
-          </n-alert>
+          </n-alert> -->
 
           <!-- Universal AI Configuration -->
-          <n-divider v-if="formData.ai_provider !== 'mock'" title-placement="left">
+          <!-- <n-divider v-if="formData.ai_provider !== 'mock'" title-placement="left">
             {{ t('settings.ai_configuration') }}
-          </n-divider>
+          </n-divider> -->
 
           <template v-if="formData.ai_provider !== 'mock'">
             <!-- API Key (for providers that require it) -->
