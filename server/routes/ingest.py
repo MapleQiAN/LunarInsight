@@ -430,18 +430,36 @@ async def cancel_ingest_job(job_id: str):
     if queue.is_connected():
         success = queue.cancel_job(job_id)
         if success:
+            # 成功取消后，同时更新内存状态（如果存在）
+            if job_id in jobs:
+                jobs[job_id].update({
+                    "status": "cancelled",
+                    "message": "任务已被用户取消"
+                })
             return {"message": "Job cancelled successfully", "jobId": job_id}
         else:
             # Check if job exists
             status = queue.get_job_status(job_id)
             if status.get("status") == "not_found":
-                raise HTTPException(status_code=404, detail="Job not found")
+                # 任务未找到，可能还没开始处理，创建一个取消状态记录
+                jobs[job_id] = {
+                    "status": "cancelled",
+                    "message": "任务已被用户取消",
+                    "progress": 0
+                }
+                return {"message": "Job cancelled successfully", "jobId": job_id}
             else:
                 raise HTTPException(status_code=400, detail="Job cannot be cancelled (already completed or failed)")
     
     # Fallback: mark job as cancelled in in-memory storage
     if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
+        # 如果内存中也没有，创建一个取消状态记录
+        jobs[job_id] = {
+            "status": "cancelled",
+            "message": "任务已被用户取消",
+            "progress": 0
+        }
+        return {"message": "Job cancelled successfully", "jobId": job_id}
     
     current_status = jobs[job_id].get("status")
     if current_status in ["completed", "failed", "cancelled"]:
