@@ -85,6 +85,19 @@
                     <span class="status-message">{{ task.message || getStatusMessage(task.status) }}</span>
                   </div>
 
+                  <!-- AI Mode Badge -->
+                  <div v-if="task.aiMode" class="ai-mode-badge">
+                    <n-tag type="success" size="tiny" :bordered="false">
+                      <template #icon>
+                        <n-icon :component="SparklesOutline" />
+                      </template>
+                      AI 模式
+                    </n-tag>
+                    <n-tag v-if="task.aiStats?.model" type="info" size="tiny" :bordered="false">
+                      {{ task.aiStats.model }}
+                    </n-tag>
+                  </div>
+
                   <!-- Stats (completed only) -->
                   <div v-if="task.status === 'completed' && task.stats" class="task-stats">
                     <div class="stat-chip">
@@ -98,6 +111,15 @@
                     <div class="stat-chip">
                       <span class="stat-label">概念</span>
                       <span class="stat-value">{{ task.stats.concepts }}</span>
+                    </div>
+                  </div>
+
+                  <!-- AI Tokens (completed and AI mode) -->
+                  <div v-if="task.status === 'completed' && task.aiMode && task.aiStats" class="ai-tokens-stats">
+                    <div class="tokens-chip">
+                      <span class="tokens-icon">📊</span>
+                      <span class="tokens-label">Tokens:</span>
+                      <span class="tokens-value">{{ formatNumber(task.aiStats.totalTokens) }}</span>
                     </div>
                   </div>
                 </div>
@@ -141,7 +163,8 @@ import {
   ChevronDownOutline,
   CheckmarkCircleOutline,
   AlertCircleOutline,
-  TimeOutline
+  TimeOutline,
+  SparklesOutline
 } from '@vicons/ionicons5'
 
 const router = useRouter()
@@ -191,6 +214,11 @@ const handleClose = () => {
 
 const handleViewGraph = () => {
   router.push('/graph')
+}
+
+const formatNumber = (num: number | undefined) => {
+  if (!num) return '0'
+  return num.toLocaleString('zh-CN')
 }
 </script>
 
@@ -374,10 +402,18 @@ const handleViewGraph = () => {
           }
         }
 
+        .ai-mode-badge {
+          display: flex;
+          gap: 6px;
+          margin-top: 8px;
+          flex-wrap: wrap;
+        }
+
         .task-stats {
           display: flex;
           gap: 6px;
           margin-top: 8px;
+          flex-wrap: wrap;
 
           .stat-chip {
             display: flex;
@@ -398,6 +434,39 @@ const handleViewGraph = () => {
               font-size: 12px;
               font-weight: 700;
               color: #c2a474;
+            }
+          }
+        }
+
+        .ai-tokens-stats {
+          margin-top: 8px;
+
+          .tokens-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: linear-gradient(135deg, rgba(194, 164, 116, 0.1) 0%, rgba(155, 135, 245, 0.1) 100%);
+            border-radius: 8px;
+            border: 1px solid rgba(194, 164, 116, 0.25);
+
+            .tokens-icon {
+              font-size: 14px;
+            }
+
+            .tokens-label {
+              font-size: 11px;
+              color: #64748b;
+              font-weight: 500;
+            }
+
+            .tokens-value {
+              font-size: 13px;
+              font-weight: 700;
+              background: linear-gradient(135deg, #c2a474 0%, #9b87f5 100%);
+              -webkit-background-clip: text;
+              -webkit-text-fill-color: transparent;
+              background-clip: text;
             }
           }
         }

@@ -15,6 +15,14 @@ export interface ProcessingTask {
     triplets: number
     concepts: number
   }
+  aiMode?: boolean
+  aiStats?: {
+    totalTokens?: number
+    promptTokens?: number
+    completionTokens?: number
+    model?: string
+  }
+  insights?: string[]
   createdAt: number
 }
 
@@ -115,7 +123,15 @@ export const useProcessingStore = defineStore('processing', () => {
         updateTask(jobId, {
           progress: status.progress || 0,
           message: status.message || '',
-          stats: status.stats
+          stats: status.stats,
+          aiMode: status.ai_mode,
+          aiStats: status.ai_stats ? {
+            totalTokens: status.ai_stats.total_tokens,
+            promptTokens: status.ai_stats.prompt_tokens,
+            completionTokens: status.ai_stats.completion_tokens,
+            model: status.ai_stats.model
+          } : undefined,
+          insights: status.insights
         })
         
         if (status.status === 'completed') {
