@@ -21,64 +21,79 @@
             <n-select
               v-model:value="formData.ai_provider"
               :options="providerOptions"
+              :loading="loadingProviders"
               @update:value="handleProviderChange"
             />
           </n-form-item>
 
-          <!-- OpenAI Settings -->
-          <n-divider v-if="formData.ai_provider === 'openai'" title-placement="left">
-            OpenAI {{ t('settings.configuration') }}
+          <!-- Current Provider Info -->
+          <n-alert 
+            v-if="currentProvider" 
+            type="info" 
+            style="margin-bottom: 16px"
+            :show-icon="false"
+          >
+            <template #header>
+              <n-space align="center">
+                <n-icon size="20">
+                  <information-circle-outline />
+                </n-icon>
+                <span>{{ currentProvider.name }}</span>
+              </n-space>
+            </template>
+            <n-space vertical size="small">
+              <div>
+                <strong>{{ t('settings.default_model') }}:</strong> {{ currentProvider.default_model }}
+              </div>
+              <div v-if="currentProvider.requires_api_key">
+                <n-tag type="warning" size="small">{{ t('settings.api_key_required_tag') }}</n-tag>
+              </div>
+            </n-space>
+          </n-alert>
+
+          <!-- Universal AI Configuration -->
+          <n-divider v-if="formData.ai_provider !== 'mock'" title-placement="left">
+            {{ t('settings.ai_configuration') }}
           </n-divider>
 
-          <template v-if="formData.ai_provider === 'openai'">
-            <n-form-item :label="t('settings.api_key')" path="openai_api_key">
+          <template v-if="formData.ai_provider !== 'mock'">
+            <!-- API Key (for providers that require it) -->
+            <n-form-item 
+              v-if="currentProvider?.requires_api_key"
+              :label="t('settings.api_key')" 
+              path="ai_api_key"
+            >
               <n-input
-                v-model:value="formData.openai_api_key"
+                v-model:value="formData.ai_api_key"
                 type="password"
                 show-password-on="click"
                 :placeholder="t('settings.api_key_placeholder')"
               />
             </n-form-item>
 
-            <n-form-item :label="t('settings.model')" path="openai_model">
-              <n-input
-                v-model:value="formData.openai_model"
-                :placeholder="'gpt-4o-mini'"
-              />
-            </n-form-item>
-
-            <n-form-item :label="t('settings.base_url')" path="openai_base_url">
-              <n-input
-                v-model:value="formData.openai_base_url"
-                :placeholder="t('settings.base_url_placeholder')"
-              />
-            </n-form-item>
-          </template>
-
-          <!-- Ollama Settings -->
-          <n-divider v-if="formData.ai_provider === 'ollama'" title-placement="left">
-            Ollama {{ t('settings.configuration') }}
-          </n-divider>
-
-          <template v-if="formData.ai_provider === 'ollama'">
-            <n-form-item :label="t('settings.base_url')" path="ollama_base_url">
-              <n-input
-                v-model:value="formData.ollama_base_url"
-                placeholder="http://localhost:11434"
-              />
-            </n-form-item>
-
-            <n-form-item :label="t('settings.model')" path="ollama_model">
+            <!-- Model Name -->
+            <n-form-item :label="t('settings.model')" path="ai_model">
               <n-space vertical style="width: 100%">
+                <!-- For Ollama: show model selector -->
                 <n-select
-                  v-model:value="formData.ollama_model"
+                  v-if="formData.ai_provider === 'ollama'"
+                  v-model:value="formData.ai_model"
                   :options="ollamaModelOptions"
                   :loading="loadingModels"
                   filterable
                   tag
-                  :placeholder="t('settings.select_or_type_model')"
+                  :placeholder="currentProvider?.default_model || t('settings.select_or_type_model')"
                 />
+                <!-- For other providers: show input -->
+                <n-input
+                  v-else
+                  v-model:value="formData.ai_model"
+                  :placeholder="currentProvider?.default_model || t('settings.model_placeholder')"
+                />
+                
+                <!-- Refresh button for Ollama -->
                 <n-button
+                  v-if="formData.ai_provider === 'ollama'"
                   text
                   type="primary"
                   size="small"
@@ -91,6 +106,14 @@
                   {{ t('settings.refresh_models') }}
                 </n-button>
               </n-space>
+            </n-form-item>
+
+            <!-- Base URL -->
+            <n-form-item :label="t('settings.base_url')" path="ai_base_url">
+              <n-input
+                v-model:value="formData.ai_base_url"
+                :placeholder="t('settings.base_url_placeholder')"
+              />
             </n-form-item>
           </template>
 
@@ -133,45 +156,86 @@
 
       <!-- Help Information -->
       <n-card :title="t('settings.help')" class="settings-card">
-        <n-space vertical>
-          <div>
-            <strong>{{ t('settings.how_to_use_ollama') }}</strong>
+        <n-collapse>
+          <n-collapse-item :title="t('settings.supported_providers')" name="providers">
+            <n-space vertical>
+              <div v-for="provider in allProviders" :key="provider.id">
+                <strong>{{ provider.name }}</strong>
+                <n-text depth="3" style="margin-left: 8px">
+                  ({{ t('settings.default_model') }}: {{ provider.default_model }})
+                </n-text>
+                <n-tag 
+                  v-if="provider.requires_api_key" 
+                  type="warning" 
+                  size="small" 
+                  style="margin-left: 8px"
+                >
+                  {{ t('settings.api_key_required_tag') }}
+                </n-tag>
+              </div>
+            </n-space>
+          </n-collapse-item>
+
+          <n-collapse-item :title="t('settings.how_to_use_ollama')" name="ollama">
             <n-ol style="margin-top: 8px">
               <n-li>{{ t('settings.ollama_step1') }}</n-li>
               <n-li>{{ t('settings.ollama_step2') }}</n-li>
               <n-li>{{ t('settings.ollama_step3') }}</n-li>
             </n-ol>
-          </div>
+          </n-collapse-item>
 
-          <n-divider />
+          <n-collapse-item :title="t('settings.how_to_use_cloud_providers')" name="cloud">
+            <n-space vertical>
+              <div>
+                <strong>OpenAI / Anthropic / Google Gemini:</strong>
+                <n-ol style="margin-top: 8px">
+                  <n-li>{{ t('settings.cloud_step1') }}</n-li>
+                  <n-li>{{ t('settings.cloud_step2') }}</n-li>
+                  <n-li>{{ t('settings.cloud_step3') }}</n-li>
+                </n-ol>
+              </div>
+              <div>
+                <strong>{{ t('settings.chinese_providers') }}:</strong>
+                <n-ol style="margin-top: 8px">
+                  <n-li>{{ t('settings.chinese_step1') }}</n-li>
+                  <n-li>{{ t('settings.chinese_step2') }}</n-li>
+                </n-ol>
+              </div>
+            </n-space>
+          </n-collapse-item>
 
-          <div>
-            <strong>{{ t('settings.how_to_use_openai') }}</strong>
-            <n-ol style="margin-top: 8px">
-              <n-li>{{ t('settings.openai_step1') }}</n-li>
-              <n-li>{{ t('settings.openai_step2') }}</n-li>
-            </n-ol>
-          </div>
-        </n-space>
+          <n-collapse-item :title="t('settings.configuration_tips')" name="tips">
+            <n-ul>
+              <n-li>{{ t('settings.tip1') }}</n-li>
+              <n-li>{{ t('settings.tip2') }}</n-li>
+              <n-li>{{ t('settings.tip3') }}</n-li>
+              <n-li>{{ t('settings.tip4') }}</n-li>
+            </n-ul>
+          </n-collapse-item>
+        </n-collapse>
       </n-card>
     </div>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 import {
   FlashOutline,
   SaveOutline,
-  RefreshOutline
+  RefreshOutline,
+  InformationCircleOutline
 } from '@vicons/ionicons5'
 import {
+  getAIProviders,
   getSettings,
   updateAISettings,
   testAIConnection,
-  getOllamaModels
+  getOllamaModels,
+  type AIProvider,
+  type AISettings
 } from '@/api/services'
 
 const { t } = useI18n()
@@ -179,13 +243,11 @@ const message = useMessage()
 
 // Form data
 const formRef = ref(null)
-const formData = ref({
+const formData = ref<AISettings>({
   ai_provider: 'mock',
-  openai_api_key: '',
-  openai_model: 'gpt-4o-mini',
-  openai_base_url: '',
-  ollama_base_url: 'http://localhost:11434',
-  ollama_model: 'llama3',
+  ai_api_key: '',
+  ai_model: '',
+  ai_base_url: '',
   neo4j_uri: '',
   neo4j_user: '',
   redis_url: ''
@@ -195,9 +257,24 @@ const formData = ref({
 const saving = ref(false)
 const testing = ref(false)
 const loadingModels = ref(false)
+const loadingProviders = ref(false)
 
-// Ollama models
-const ollamaModels = ref([])
+// AI Providers
+const allProviders = ref<AIProvider[]>([])
+const ollamaModels = ref<string[]>([])
+
+// Computed
+const providerOptions = computed(() => 
+  allProviders.value.map(provider => ({
+    label: provider.name,
+    value: provider.id
+  }))
+)
+
+const currentProvider = computed(() => 
+  allProviders.value.find(p => p.id === formData.value.ai_provider)
+)
+
 const ollamaModelOptions = computed(() => 
   ollamaModels.value.map(model => ({
     label: model,
@@ -205,24 +282,33 @@ const ollamaModelOptions = computed(() =>
   }))
 )
 
-// Provider options
-const providerOptions = [
-  { label: 'Mock (测试模式)', value: 'mock' },
-  { label: 'OpenAI', value: 'openai' },
-  { label: 'Ollama (本地)', value: 'ollama' }
-]
-
 // Form rules
-const formRules = {
+const formRules = computed(() => ({
   ai_provider: {
     required: true,
     message: t('settings.provider_required'),
     trigger: 'change'
   },
-  openai_api_key: {
-    required: true,
+  ai_api_key: {
+    required: currentProvider.value?.requires_api_key,
     message: t('settings.api_key_required'),
     trigger: 'blur'
+  }
+}))
+
+// Load AI providers
+const loadProviders = async () => {
+  loadingProviders.value = true
+  try {
+    const response = await getAIProviders()
+    if (response?.providers) {
+      allProviders.value = response.providers
+    }
+  } catch (error) {
+    message.error(t('settings.load_providers_failed'))
+    console.error('Failed to load AI providers:', error)
+  } finally {
+    loadingProviders.value = false
   }
 }
 
@@ -232,17 +318,18 @@ const loadSettings = async () => {
     const response = await getSettings()
     if (response) {
       Object.assign(formData.value, response)
+      
       // If API key is masked, clear it
-      if (formData.value.openai_api_key === '***') {
-        formData.value.openai_api_key = ''
+      if (formData.value.ai_api_key === '***') {
+        formData.value.ai_api_key = ''
       }
       
-      // If provider is ollama, automatically fetch models and ensure saved model is in list
+      // If provider is ollama, automatically fetch models
       if (formData.value.ai_provider === 'ollama') {
-        await fetchOllamaModels(true) // silent mode (no success message)
+        await fetchOllamaModels(true) // silent mode
         // Ensure saved model is in the options list
-        if (formData.value.ollama_model && !ollamaModels.value.includes(formData.value.ollama_model)) {
-          ollamaModels.value.push(formData.value.ollama_model)
+        if (formData.value.ai_model && !ollamaModels.value.includes(formData.value.ai_model)) {
+          ollamaModels.value.push(formData.value.ai_model)
         }
       }
     }
@@ -258,10 +345,10 @@ const fetchOllamaModels = async (silent = false) => {
   try {
     const response = await getOllamaModels()
     if (response.success) {
-      const savedModel = formData.value.ollama_model
+      const savedModel = formData.value.ai_model
       ollamaModels.value = response.models
       
-      // Ensure saved model is in the list even if not returned from API
+      // Ensure saved model is in the list
       if (savedModel && !ollamaModels.value.includes(savedModel)) {
         ollamaModels.value.push(savedModel)
       }
@@ -271,7 +358,7 @@ const fetchOllamaModels = async (silent = false) => {
       }
     } else {
       if (!silent) {
-        message.warning(response.message)
+        message.warning(response.message || t('settings.fetch_models_failed'))
       }
     }
   } catch (error) {
@@ -285,24 +372,21 @@ const fetchOllamaModels = async (silent = false) => {
 }
 
 // Handle provider change
-const handleProviderChange = (value) => {
+const handleProviderChange = (value: string) => {
   if (value === 'ollama' && ollamaModels.value.length === 0) {
     fetchOllamaModels()
   }
+  
+  // Clear model and base_url when switching providers
+  formData.value.ai_model = ''
+  formData.value.ai_base_url = ''
 }
 
 // Test connection
 const testConnection = async () => {
   testing.value = true
   try {
-    const response = await testAIConnection({
-      ai_provider: formData.value.ai_provider,
-      openai_api_key: formData.value.openai_api_key,
-      openai_model: formData.value.openai_model,
-      openai_base_url: formData.value.openai_base_url,
-      ollama_base_url: formData.value.ollama_base_url,
-      ollama_model: formData.value.ollama_model
-    })
+    const response = await testAIConnection(formData.value)
 
     if (response.success) {
       message.success(response.message)
@@ -323,23 +407,16 @@ const saveSettings = async () => {
     await formRef.value?.validate()
     
     saving.value = true
-    const response = await updateAISettings({
-      ai_provider: formData.value.ai_provider,
-      openai_api_key: formData.value.openai_api_key,
-      openai_model: formData.value.openai_model,
-      openai_base_url: formData.value.openai_base_url,
-      ollama_base_url: formData.value.ollama_base_url,
-      ollama_model: formData.value.ollama_model
-    })
+    const response = await updateAISettings(formData.value)
 
     if (response.success) {
       message.success(response.message)
-      // Reload settings to ensure form displays the saved values from backend
+      // Reload settings to ensure form displays the saved values
       await loadSettings()
     } else {
       message.error(response.message || t('settings.save_failed'))
     }
-  } catch (error) {
+  } catch (error: any) {
     if (error?.errors) {
       // Validation errors
       return
@@ -351,8 +428,9 @@ const saveSettings = async () => {
   }
 }
 
-onMounted(() => {
-  loadSettings()
+onMounted(async () => {
+  await loadProviders()
+  await loadSettings()
 })
 </script>
 
@@ -406,7 +484,7 @@ onMounted(() => {
   border-radius: 8px;
 }
 
-:deep(.n-ol) {
+:deep(.n-ol), :deep(.n-ul) {
   margin-left: 0;
   padding-left: 20px;
 }
@@ -416,4 +494,3 @@ onMounted(() => {
   color: #4b5563;
 }
 </style>
-
