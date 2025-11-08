@@ -1,6 +1,6 @@
 """Graph data models."""
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Node(BaseModel):
@@ -16,7 +16,7 @@ class Edge(BaseModel):
     source: str
     target: str
     type: str
-    properties: Dict[str, Any] = {}
+    properties: Dict[str, Any] = Field(default_factory=dict)
 
 
 class GraphQuery(BaseModel):

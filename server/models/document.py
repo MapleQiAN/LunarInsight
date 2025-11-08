@@ -1,7 +1,7 @@
 """Document data models."""
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class DocumentCreate(BaseModel):
@@ -12,11 +12,13 @@ class DocumentCreate(BaseModel):
     mime: Optional[str] = None
     size: int
     source_id: Optional[str] = None
-    meta: Optional[dict] = None
+    meta: Optional[Dict[str, Any]] = None
 
 
 class Document(BaseModel):
     """Document model."""
+    model_config = ConfigDict(from_attributes=True)
+    
     id: str
     filename: str
     checksum: str
@@ -25,12 +27,9 @@ class Document(BaseModel):
     size: int
     path: Optional[str] = None
     source_id: Optional[str] = None
-    meta: Optional[dict] = None
+    meta: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class Chunk(BaseModel):
@@ -38,7 +37,7 @@ class Chunk(BaseModel):
     doc_id: str
     chunk_id: str
     text: str
-    meta: dict = Field(default_factory=dict, description="Metadata: page, section, offset, etc.")
+    meta: Dict[str, Any] = Field(default_factory=dict, description="Metadata: page, section, offset, etc.")
 
 
 class Triplet(BaseModel):
@@ -47,7 +46,7 @@ class Triplet(BaseModel):
     predicate: str
     object: str
     confidence: float = Field(ge=0.0, le=1.0)
-    evidence: dict = Field(default_factory=dict, description="Evidence: docId, chunkId, page, offset")
+    evidence: Dict[str, Any] = Field(default_factory=dict, description="Evidence: docId, chunkId, page, offset")
     doc_id: Optional[str] = None
     chunk_id: Optional[str] = None
 
