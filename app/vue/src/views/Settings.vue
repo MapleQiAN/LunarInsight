@@ -230,8 +230,8 @@ const formRules = {
 const loadSettings = async () => {
   try {
     const response = await getSettings()
-    if (response.data) {
-      Object.assign(formData.value, response.data)
+    if (response) {
+      Object.assign(formData.value, response)
       // If API key is masked, clear it
       if (formData.value.openai_api_key === '***') {
         formData.value.openai_api_key = ''
@@ -248,11 +248,11 @@ const fetchOllamaModels = async () => {
   loadingModels.value = true
   try {
     const response = await getOllamaModels()
-    if (response.data.success) {
-      ollamaModels.value = response.data.models
+    if (response.success) {
+      ollamaModels.value = response.models
       message.success(t('settings.models_loaded', { count: ollamaModels.value.length }))
     } else {
-      message.warning(response.data.message)
+      message.warning(response.message)
     }
   } catch (error) {
     message.error(t('settings.fetch_models_failed'))
@@ -282,10 +282,10 @@ const testConnection = async () => {
       ollama_model: formData.value.ollama_model
     })
 
-    if (response.data.success) {
-      message.success(response.data.message)
+    if (response.success) {
+      message.success(response.message)
     } else {
-      message.error(response.data.message)
+      message.error(response.message)
     }
   } catch (error) {
     message.error(t('settings.test_failed'))
@@ -310,10 +310,10 @@ const saveSettings = async () => {
       ollama_model: formData.value.ollama_model
     })
 
-    if (response.data.success) {
-      message.success(response.data.message)
+    if (response.success) {
+      message.success(response.message)
     } else {
-      message.error(response.data.message || t('settings.save_failed'))
+      message.error(response.message || t('settings.save_failed'))
     }
   } catch (error) {
     if (error?.errors) {
