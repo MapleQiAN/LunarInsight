@@ -40,6 +40,11 @@ class Neo4jClient:
                 FOR (c:Concept) REQUIRE c.name IS UNIQUE
             """)
             
+            session.run("""
+                CREATE CONSTRAINT runtime_config_id_unique IF NOT EXISTS
+                FOR (r:RuntimeConfig) REQUIRE r.id IS UNIQUE
+            """)
+            
             # Indexes
             session.run("""
                 CREATE INDEX source_hash IF NOT EXISTS

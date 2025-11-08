@@ -1,9 +1,9 @@
 """AI-powered document segmentation and knowledge extraction service."""
 import json
 from typing import List, Dict, Any, Optional
-from infra.config import settings
 from infra.ai_providers import AIProviderFactory, BaseAIClient
 from models.document import Chunk, Triplet
+from services.config_service import config_service
 
 
 class AISegmenter:
@@ -11,24 +11,17 @@ class AISegmenter:
     
     def __init__(self):
         """Initialize AI segmenter with configured AI provider."""
-        self.provider = settings.ai_provider
+        self.provider = None
         self.client: Optional[BaseAIClient] = None
         self.model = None
         
         try:
-            # 优先使用新的通用配置
-            api_key = settings.ai_api_key
-            model = settings.ai_model
-            base_url = settings.ai_base_url
-            
-            # 向后兼容：如果使用旧的provider，尝试使用旧配置
-            if self.provider == "openai" and not api_key:
-                api_key = settings.openai_api_key
-                model = model or settings.openai_model
-                base_url = base_url or settings.openai_base_url
-            elif self.provider == "ollama" and not base_url:
-                base_url = settings.ollama_base_url
-                model = model or settings.ollama_model
+            # 从数据库读取运行时配置
+            ai_config = config_service.get_ai_provider_config()
+            self.provider = ai_config["provider"]
+            api_key = ai_config["api_key"]
+            model = ai_config["model"]
+            base_url = ai_config["base_url"]
             
             # Mock 模式不需要 API key
             if self.provider == "mock":
