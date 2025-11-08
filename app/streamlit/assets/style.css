@@ -1,479 +1,377 @@
-/* 月悟·镜 - 专业仪表板主题样式 */
+/* 月悟 - 水墨留白风格主题 */
 
-/* 导入思源宋体和现代字体 */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@200;300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+/* 导入思源宋体和轻量无衬线字体 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600&family=Inter:wght@300;400;500;600&display=swap');
 
-/* 专业配色方案 */
+/* 配色方案 - 现代中国风 */
 :root {
-    /* 主色调 - 深蓝灰色系（专业感） */
-    --primary-dark: #1a2332;
-    --primary: #2d3748;
-    --primary-light: #4a5568;
+    /* 主色 - 月白 */
+    --color-moon-white: #F2F2F2;
     
-    /* 强调色 - 金色系（中国风点缀） */
-    --accent-gold: #d4af37;
-    --accent-gold-light: #e5c158;
-    --accent-gold-dark: #b8945f;
+    /* 辅色 - 黛青 */
+    --color-dark-cyan: #22333B;
     
-    /* 辅助色 - 青色系（科技感） */
-    --accent-cyan: #0ea5e9;
-    --accent-cyan-light: #38bdf8;
-    --accent-cyan-dark: #0284c7;
+    /* 对比色 - 朱砂（仅用于强调） */
+    --color-vermillion: #D84B3C;
     
-    /* 背景色 - 浅灰白色（高可读性） */
-    --bg-primary: #ffffff;
-    --bg-secondary: #f8fafc;
-    --bg-tertiary: #f1f5f9;
-    --bg-dark: #1e293b;
+    /* 背景色 */
+    --bg-primary: #FFFFFF;
+    --bg-secondary: var(--color-moon-white);
     
-    /* 文字颜色 - 高对比度 */
-    --text-primary: #1e293b;
-    --text-secondary: #475569;
-    --text-tertiary: #64748b;
-    --text-light: #ffffff;
+    /* 文字颜色 */
+    --text-primary: var(--color-dark-cyan);
+    --text-secondary: #5A6B73;
+    --text-tertiary: #8A9BA3;
     
-    /* 边框和分割线 */
-    --border-color: #e2e8f0;
-    --border-accent: #cbd5e1;
+    /* 边框 */
+    --border-color: #E0E0E0;
+    --border-width: 1px;
     
-    /* 状态颜色 */
-    --success: #10b981;
-    --warning: #f59e0b;
-    --error: #ef4444;
-    --info: #3b82f6;
+    /* 间距 */
+    --spacing-xs: 0.5rem;
+    --spacing-sm: 1rem;
+    --spacing-md: 1.5rem;
+    --spacing-lg: 2rem;
+    --spacing-xl: 3rem;
     
-    /* 阴影 */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    /* 字体 */
+    --font-serif: 'Noto Serif SC', '思源宋体', serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* 全局样式 */
+/* 全局样式重置 */
 * {
-    font-family: 'Inter', 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-family: var(--font-sans) !important;
+    box-sizing: border-box;
 }
 
-/* 主容器样式 */
+/* 主容器 */
 .main {
-    background: var(--bg-secondary);
-    padding: 2rem;
+    background: var(--bg-primary);
+    padding: 0;
 }
 
-/* 标题样式 - 专业设计 */
+/* 标题样式 - 克制、不浮夸 */
 h1, h2, h3, h4, h5, h6 {
-    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
-    font-weight: 600;
+    font-family: var(--font-serif) !important;
+    font-weight: 500;
     color: var(--text-primary);
-    letter-spacing: -0.02em;
-    line-height: 1.2;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    margin: 0;
 }
 
 h1 {
-    font-size: 2.75rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--accent-gold) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 0.5rem;
-    position: relative;
+    font-size: 1.75rem;
+    font-weight: 500;
 }
 
 h2 {
-    font-size: 1.875rem;
-    color: var(--text-primary);
-    margin-top: 2rem;
-    margin-bottom: 1rem;
-    font-weight: 600;
+    font-size: 1.5rem;
+    font-weight: 500;
 }
 
 h3 {
-    font-size: 1.5rem;
-    color: var(--text-primary);
-    font-weight: 600;
+    font-size: 1.25rem;
+    font-weight: 500;
 }
 
-/* 段落和文本样式 */
+h4 {
+    font-size: 1.125rem;
+    font-weight: 500;
+}
+
+/* 文本样式 */
 p, div, span, label {
     color: var(--text-secondary);
-    line-height: 1.7;
+    line-height: 1.6;
     font-size: 0.9375rem;
+    font-weight: 400;
 }
 
-/* 侧边栏样式 - 深色专业主题 */
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary) 100%);
-    border-right: 1px solid var(--border-color);
+/* 顶部标题栏 */
+.header-container {
+    background: var(--bg-primary);
+    border-bottom: var(--border-width) solid var(--border-color);
+    padding: var(--spacing-md) var(--spacing-lg);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-[data-testid="stSidebar"] * {
-    color: var(--text-light) !important;
-}
-
-[data-testid="stSidebar"] .stSelectbox label,
-[data-testid="stSidebar"] .stButton button {
-    color: var(--text-light) !important;
-}
-
-/* 按钮样式 - 现代专业设计 */
-.stButton > button {
-    font-family: 'Inter', 'Noto Serif SC', sans-serif !important;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-    color: var(--text-light) !important;
-    border: none;
-    border-radius: 8px;
-    padding: 0.625rem 1.5rem;
+.header-title {
+    font-family: var(--font-serif) !important;
+    font-size: 1.5rem;
     font-weight: 500;
-    font-size: 0.9375rem;
-    box-shadow: var(--shadow-sm);
-    transition: all 0.2s ease;
-    border: 1px solid transparent;
+    color: var(--text-primary);
+    letter-spacing: 0.05em;
+}
+
+.header-subtitle {
+    font-family: var(--font-sans) !important;
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    font-weight: 400;
+    margin-left: 0.5rem;
+}
+
+.header-menu {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* 指标卡片 - 细边框、无阴影、留白感 */
+.metric-card {
+    background: var(--bg-primary);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: 0;
+    padding: var(--spacing-md);
+    margin: 0;
+    transition: none;
+}
+
+.metric-card-label {
+    font-family: var(--font-sans) !important;
+    font-size: 0.8125rem;
+    color: var(--text-tertiary);
+    font-weight: 400;
+    margin-bottom: var(--spacing-xs);
+    text-transform: none;
+    letter-spacing: 0.02em;
+}
+
+.metric-card-value {
+    font-family: var(--font-sans) !important;
+    font-size: 2rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: var(--spacing-xs) 0;
+    letter-spacing: -0.01em;
+}
+
+.metric-card-sublabel {
+    font-family: var(--font-sans) !important;
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    font-weight: 400;
+}
+
+/* 强调色仅用于关键信息 */
+.metric-card-value.accent {
+    color: var(--color-vermillion);
+}
+
+/* 主内容区 */
+.content-container {
+    padding: var(--spacing-xl) var(--spacing-lg);
+    background: var(--bg-primary);
+}
+
+.content-section {
+    margin-bottom: var(--spacing-xl);
+}
+
+/* 图表容器 - 克制装饰 */
+.chart-container {
+    background: var(--bg-primary);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: 0;
+    padding: var(--spacing-md);
+    margin: 0;
+}
+
+/* Streamlit 图表样式覆盖 - 移除装饰 */
+[data-testid="stBarChart"] {
+    background: var(--bg-primary);
+}
+
+[data-testid="stBarChart"] svg {
+    background: var(--bg-primary);
+}
+
+/* 辅助信息面板 */
+.info-panel {
+    background: var(--bg-primary);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: 0;
+    padding: var(--spacing-md);
+    margin: 0;
+}
+
+.info-panel-title {
+    font-family: var(--font-serif) !important;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-xs);
+    border-bottom: var(--border-width) solid var(--border-color);
+}
+
+.info-panel-item {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-xs) 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.info-panel-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    margin-right: var(--spacing-sm);
+    flex-shrink: 0;
+}
+
+/* 按钮样式 - 极简 */
+.stButton > button {
+    font-family: var(--font-sans) !important;
+    background: var(--bg-primary);
+    color: var(--text-primary) !important;
+    border: var(--border-width) solid var(--border-color);
+    border-radius: 0;
+    padding: 0.5rem 1rem;
+    font-weight: 400;
+    font-size: 0.875rem;
+    transition: none;
 }
 
 .stButton > button:hover {
-    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
+    background: var(--bg-secondary);
+    border-color: var(--text-primary);
+    transform: none;
 }
 
-/* 强调按钮（金色） */
-.stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, var(--accent-gold) 0%, var(--accent-gold-light) 100%);
-    color: var(--primary-dark) !important;
-    font-weight: 600;
-}
-
-.stButton > button[kind="primary"]:hover {
-    background: linear-gradient(135deg, var(--accent-gold-light) 0%, var(--accent-gold) 100%);
-    box-shadow: var(--shadow-lg);
-}
-
-/* 输入框样式 - 现代设计 */
+/* 输入框样式 */
 .stTextInput > div > div > input,
 .stTextArea > div > div > textarea,
 .stSelectbox > div > div > select {
-    font-family: 'Inter', 'Noto Serif SC', sans-serif !important;
-    border: 1.5px solid var(--border-color);
-    border-radius: 8px;
-    padding: 0.625rem 0.875rem;
+    font-family: var(--font-sans) !important;
+    border: var(--border-width) solid var(--border-color);
+    border-radius: 0;
+    padding: 0.5rem 0.75rem;
     background: var(--bg-primary);
     color: var(--text-primary);
-    font-size: 0.9375rem;
-    transition: all 0.2s ease;
+    font-size: 0.875rem;
+    transition: none;
 }
 
 .stTextInput > div > div > input:focus,
 .stTextArea > div > div > textarea:focus,
 .stSelectbox > div > div > select:focus {
-    border-color: var(--accent-cyan);
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+    border-color: var(--text-primary);
     outline: none;
+    box-shadow: none;
 }
 
-/* 文件上传器样式 */
-.stFileUploader {
-    border: 2px dashed var(--border-accent);
-    border-radius: 12px;
-    padding: 2rem;
+/* 侧边栏 - 极简 */
+[data-testid="stSidebar"] {
     background: var(--bg-primary);
-    transition: all 0.3s ease;
+    border-right: var(--border-width) solid var(--border-color);
 }
 
-.stFileUploader:hover {
-    border-color: var(--accent-cyan);
-    background: var(--bg-secondary);
+[data-testid="stSidebar"] * {
+    color: var(--text-primary) !important;
 }
 
-/* 卡片和信息框样式 - 专业设计 */
-.stAlert {
-    border-radius: 10px;
-    border-left: 4px solid;
-    font-family: 'Inter', 'Noto Serif SC', sans-serif !important;
-    box-shadow: var(--shadow-sm);
-    padding: 1rem 1.25rem;
-}
-
-.stSuccess {
-    background: #f0fdf4;
-    border-left-color: var(--success);
-    color: #166534;
-}
-
-.stInfo {
-    background: #eff6ff;
-    border-left-color: var(--info);
-    color: #1e40af;
-}
-
-.stWarning {
-    background: #fffbeb;
-    border-left-color: var(--warning);
-    color: #92400e;
-}
-
-.stError {
-    background: #fef2f2;
-    border-left-color: var(--error);
-    color: #991b1b;
-}
-
-/* 指标卡片样式 - 专业仪表板风格 */
+/* 指标显示 */
 [data-testid="stMetricValue"] {
-    font-family: 'Inter', 'Noto Serif SC', sans-serif !important;
-    font-weight: 700;
+    font-family: var(--font-sans) !important;
+    font-weight: 500;
     color: var(--text-primary);
-    font-size: 2.25rem;
-    letter-spacing: -0.02em;
+    font-size: 1.75rem;
+    letter-spacing: -0.01em;
 }
 
 [data-testid="stMetricLabel"] {
-    font-family: 'Inter', 'Noto Serif SC', sans-serif !important;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-family: var(--font-sans) !important;
+    color: var(--text-tertiary);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0.02em;
 }
 
-[data-testid="stMetricDelta"] {
-    font-family: 'Inter', sans-serif !important;
-    font-weight: 600;
-}
-
-/* 表格样式 - 现代设计 */
+/* 表格样式 */
 .stDataFrame {
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
-    border: 1px solid var(--border-color);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: 0;
 }
 
-/* JSON 显示样式 */
-.stJson {
-    background: var(--bg-dark);
-    border-radius: 10px;
-    padding: 1.25rem;
-    border: 1px solid var(--border-color);
-    font-family: 'Monaco', 'Menlo', 'Consolas', monospace !important;
-}
-
-/* 进度条样式 */
-.stProgress > div > div > div {
-    background: linear-gradient(90deg, var(--accent-cyan), var(--accent-cyan-light));
-    border-radius: 4px;
-}
-
-/* 选择框样式 */
-.stSelectbox label {
-    font-family: 'Inter', 'Noto Serif SC', sans-serif !important;
-    color: var(--text-primary);
-    font-weight: 500;
-    font-size: 0.9375rem;
-}
-
-/* 分隔线装饰 */
+/* 分隔线 */
 hr {
     border: none;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--border-color), transparent);
-    margin: 2rem 0;
+    height: var(--border-width);
+    background: var(--border-color);
+    margin: var(--spacing-lg) 0;
 }
 
-/* 加载动画样式 */
-.stSpinner > div {
-    border-color: var(--accent-cyan) transparent transparent transparent;
+/* 移除所有阴影 */
+* {
+    box-shadow: none !important;
 }
 
-/* 标签页样式 */
-.stTabs [data-baseweb="tab-list"] {
-    background: var(--bg-primary);
-    border-bottom: 2px solid var(--border-color);
+/* 移除所有渐变 */
+* {
+    background-image: none !important;
 }
 
-.stTabs [data-baseweb="tab"] {
-    font-family: 'Inter', 'Noto Serif SC', sans-serif !important;
-    color: var(--text-secondary);
-    font-weight: 500;
-    font-size: 0.9375rem;
-}
-
-.stTabs [aria-selected="true"] {
-    color: var(--accent-cyan);
-    border-bottom: 3px solid var(--accent-cyan);
-}
-
-/* 列布局间距 */
-[data-testid="column"] {
-    padding: 0.75rem;
+/* 移除所有动画 */
+* {
+    animation: none !important;
+    transition: none !important;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-    h1 {
-        font-size: 2rem;
+    .header-container {
+        padding: var(--spacing-sm) var(--spacing-md);
     }
     
-    h2 {
+    .header-title {
+        font-size: 1.25rem;
+    }
+    
+    .content-container {
+        padding: var(--spacing-md);
+    }
+    
+    .metric-card-value {
         font-size: 1.5rem;
-    }
-    
-    .main {
-        padding: 1rem;
     }
 }
 
-/* 自定义滚动条 - 现代设计 */
+/* 滚动条 - 极简 */
 ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 4px;
+    height: 4px;
 }
 
 ::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
+    background: var(--bg-primary);
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--border-accent);
-    border-radius: 4px;
+    background: var(--border-color);
+    border-radius: 0;
 }
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-tertiary);
 }
 
-/* 专业卡片容器 */
-.dashboard-card {
-    background: var(--bg-primary);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin: 1rem 0;
-    box-shadow: var(--shadow-sm);
-    border: 1px solid var(--border-color);
-    transition: all 0.2s ease;
+/* 隐藏 Streamlit 默认装饰 */
+#MainMenu {
+    visibility: hidden;
 }
 
-.dashboard-card:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
+footer {
+    visibility: hidden;
 }
 
-.dashboard-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.dashboard-card-title {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-}
-
-.dashboard-card-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--accent-cyan);
-    margin: 0.5rem 0;
-}
-
-/* 统计卡片网格 */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin: 1.5rem 0;
-}
-
-/* 渐变背景装饰 */
-.gradient-bg {
-    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
-    border-radius: 12px;
-    padding: 2rem;
-}
-
-/* 金色强调装饰 */
-.accent-gold {
-    color: var(--accent-gold);
-    font-weight: 600;
-}
-
-.accent-cyan {
-    color: var(--accent-cyan);
-    font-weight: 600;
-}
-
-/* 专业分隔线 */
-.divider {
-    height: 1px;
-    background: linear-gradient(90deg, 
-        transparent 0%, 
-        var(--border-color) 50%, 
-        transparent 100%);
-    margin: 2rem 0;
-}
-
-/* 状态徽章 */
-.status-badge {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.status-success {
-    background: rgba(16, 185, 129, 0.1);
-    color: var(--success);
-}
-
-.status-warning {
-    background: rgba(245, 158, 11, 0.1);
-    color: var(--warning);
-}
-
-.status-error {
-    background: rgba(239, 68, 68, 0.1);
-    color: var(--error);
-}
-
-.status-info {
-    background: rgba(59, 130, 246, 0.1);
-    color: var(--info);
-}
-
-/* 图标装饰 */
-.icon-wrapper {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-cyan-light) 100%);
-    color: white;
-    font-size: 1.25rem;
-    margin-right: 0.75rem;
-}
-
-/* 动画效果 */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.fade-in {
-    animation: fadeIn 0.3s ease-out;
+.stDeployButton {
+    display: none;
 }
