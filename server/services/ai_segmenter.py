@@ -1,7 +1,8 @@
 """AI-powered document segmentation and knowledge extraction service."""
-import os
+import json
 from typing import List, Dict, Any, Optional
-from openai import OpenAI
+from infra.config import settings
+from infra.ai_providers import AIProviderFactory, BaseAIClient
 from models.graph import TextChunk, Triplet
 
 
@@ -9,13 +10,46 @@ class AISegmenter:
     """AI-powered document analysis and knowledge extraction."""
     
     def __init__(self):
-        """Initialize AI segmenter with OpenAI client."""
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+        """Initialize AI segmenter with configured AI provider."""
+        self.provider = settings.ai_provider
+        self.client: Optional[BaseAIClient] = None
+        self.model = None
         
-        self.client = OpenAI(api_key=api_key)
-        self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        try:
+            # 优先使用新的通用配置
+            api_key = settings.ai_api_key
+            model = settings.ai_model
+            base_url = settings.ai_base_url
+            
+            # 向后兼容：如果使用旧的provider，尝试使用旧配置
+            if self.provider == "openai" and not api_key:
+                api_key = settings.openai_api_key
+                model = model or settings.openai_model
+                base_url = base_url or settings.openai_base_url
+            elif self.provider == "ollama" and not base_url:
+                base_url = settings.ollama_base_url
+                model = model or settings.ollama_model
+            
+            # Mock 模式不需要 API key
+            if self.provider == "mock":
+                api_key = api_key or "mock"
+            
+            # 创建AI客户端
+            self.client = AIProviderFactory.create_client(
+                provider=self.provider,
+                api_key=api_key,
+                model=model,
+                base_url=base_url
+            )
+            self.model = self.client.model
+            
+            # 获取提供商名称用于显示
+            provider_info = AIProviderFactory.get_provider_info(self.provider)
+            provider_name = provider_info.get("name", self.provider)
+            print(f"✅ AI Segmenter initialized with {provider_name} (model: {self.model})")
+            
+        except ValueError as e:
+            raise ValueError(f"Failed to initialize AI segmenter: {str(e)}")
     
     def optimize_user_prompt(self, user_prompt: str) -> str:
         """
@@ -43,8 +77,7 @@ class AISegmenter:
 请直接返回优化后的提示词，不要添加额外说明。"""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            response_text = self.client.chat_completion(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"请优化以下用户提示词：\n\n{user_prompt}"}
@@ -53,7 +86,7 @@ class AISegmenter:
                 max_tokens=500
             )
             
-            optimized = response.choices[0].message.content.strip()
+            optimized = response_text.strip()
             print(f"\n🔧 [Prompt优化]")
             print(f"   原始: {user_prompt[:100]}...")
             print(f"   优化: {optimized[:100]}...")
@@ -100,18 +133,17 @@ class AISegmenter:
             analysis_prompt = base_prompt
         
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            # 对于需要 JSON 格式的请求，使用 json_mode 参数
+            response_text = self.client.chat_completion(
                 messages=[
-                    {"role": "system", "content": "你是知识图谱专家，擅长分析文档结构和识别核心概念。"},
+                    {"role": "system", "content": "你是知识图谱专家，擅长分析文档结构和识别核心概念。请以JSON格式返回结果。"},
                     {"role": "user", "content": f"{analysis_prompt}\n\n文档内容：\n{sample_text}"}
                 ],
                 temperature=0.3,
-                response_format={"type": "json_object"}
+                json_mode=True
             )
             
-            import json
-            result = json.loads(response.choices[0].message.content)
+            result = json.loads(response_text)
             return result
             
         except Exception as e:
@@ -185,18 +217,17 @@ class AISegmenter:
             system_prompt = base_system_prompt
         
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            # 对于需要 JSON 格式的请求，使用 json_mode 参数
+            response_text = self.client.chat_completion(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"请深度分析以下文本并提取知识：\n\n{chunk.text}"}
                 ],
                 temperature=0.5,  # 稍高的温度以获得更有创造性的洞察
-                response_format={"type": "json_object"}
+                json_mode=True
             )
             
-            import json
-            result = json.loads(response.choices[0].message.content)
+            result = json.loads(response_text)
             
             # 转换为内部数据结构
             concepts = []

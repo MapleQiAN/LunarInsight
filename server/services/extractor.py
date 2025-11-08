@@ -1,8 +1,8 @@
 """Triplet extraction service using LLM."""
 import json
 from typing import List, Optional
-from openai import OpenAI
 from infra.config import settings
+from infra.ai_providers import AIProviderFactory, BaseAIClient
 from models.document import Triplet, Chunk
 
 
@@ -10,38 +10,66 @@ class TripletExtractor:
     """Extract triplets from text using LLM."""
     
     def __init__(self):
-        self.client = None
+        self.client: Optional[BaseAIClient] = None
         self.provider = settings.ai_provider
         self.model = None
         
-        if self.provider == "openai":
-            if settings.openai_api_key:
-                self.client = OpenAI(
-                    api_key=settings.openai_api_key,
-                    base_url=settings.openai_base_url
-                )
-                self.model = settings.openai_model
-                print(f"✅ 使用 OpenAI API，模型: {self.model}")
+        try:
+            # 优先使用新的通用配置
+            api_key = settings.ai_api_key
+            model = settings.ai_model
+            base_url = settings.ai_base_url
+            
+            # 向后兼容：如果使用旧的provider，尝试使用旧配置
+            if self.provider == "openai" and not api_key:
+                api_key = settings.openai_api_key
+                model = model or settings.openai_model
+                base_url = base_url or settings.openai_base_url
+            elif self.provider == "ollama" and not base_url:
+                base_url = settings.ollama_base_url
+                model = model or settings.ollama_model
+            
+            # 创建AI客户端
+            self.client = AIProviderFactory.create_client(
+                provider=self.provider,
+                api_key=api_key,
+                model=model,
+                base_url=base_url
+            )
+            self.model = self.client.model
+            
+            # 获取提供商名称用于显示
+            provider_names = {
+                "openai": "OpenAI GPT",
+                "anthropic": "Anthropic Claude",
+                "google": "Google Gemini",
+                "deepseek": "DeepSeek",
+                "qwen": "阿里云通义千问",
+                "glm": "智谱AI (GLM)",
+                "moonshot": "月之暗面 Kimi",
+                "ernie": "百度文心一言",
+                "minimax": "MiniMax",
+                "doubao": "字节豆包",
+                "ollama": "Ollama",
+                "mock": "Mock"
+            }
+            provider_name = provider_names.get(self.provider, self.provider)
+            
+            if self.provider != "mock":
+                print(f"✅ 使用 {provider_name}，模型: {self.model}")
             else:
-                print("⚠️  警告: OPENAI_API_KEY 未设置，将使用 mock 模式")
-                self.provider = "mock"
-        
-        elif self.provider == "ollama":
-            try:
-                # Ollama使用OpenAI兼容的API
-                self.client = OpenAI(
-                    base_url=f"{settings.ollama_base_url}/v1",
-                    api_key="ollama"  # Ollama不需要真实的API key
-                )
-                self.model = settings.ollama_model
-                print(f"✅ 使用 Ollama，地址: {settings.ollama_base_url}，模型: {self.model}")
-            except Exception as e:
-                print(f"⚠️  警告: 无法连接到 Ollama ({e})，将使用 mock 模式")
-                self.provider = "mock"
-                self.client = None
-        
-        else:
-            print("ℹ️  使用 mock 模式进行三元组提取")
+                print("ℹ️  使用 Mock 模式进行三元组提取")
+                
+        except ValueError as e:
+            print(f"⚠️  警告: AI 配置错误 ({e})，将使用 mock 模式")
+            self.provider = "mock"
+            self.client = AIProviderFactory.create_client("mock")
+            self.model = "mock"
+        except Exception as e:
+            print(f"⚠️  警告: 无法初始化 AI 客户端 ({e})，将使用 mock 模式")
+            self.provider = "mock"
+            self.client = AIProviderFactory.create_client("mock")
+            self.model = "mock"
     
     def extract(self, chunk: Chunk) -> List[Triplet]:
         """
@@ -72,30 +100,24 @@ class TripletExtractor:
             print(f"🤖 [AI请求] Provider: {self.provider}, Model: {self.model}")
             print(f"📤 [AI请求] 发送请求到 AI 服务...")
             
-            # 根据provider调整参数
-            completion_params = {
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a knowledge extraction expert. Extract subject-predicate-object triplets from the given text. Return only valid JSON array."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "temperature": 0.3,
-            }
+            # 构建消息
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a knowledge extraction expert. Extract subject-predicate-object triplets from the given text. Return only valid JSON array."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
             
-            # OpenAI支持response_format，Ollama可能不支持
-            if self.provider == "openai":
-                completion_params["response_format"] = {"type": "json_object"}
-            
-            response = self.client.chat.completions.create(**completion_params)
-            
-            # 显示AI响应的原始内容
-            raw_content = response.choices[0].message.content
+            # 使用统一接口调用AI
+            raw_content = self.client.chat_completion(
+                messages=messages,
+                temperature=0.3,
+                json_mode=True  # 请求JSON格式响应
+            )
             print(f"📥 [AI响应] 收到响应，长度: {len(raw_content)} 字符")
             print(f"📥 [AI响应] 原始内容预览: {raw_content[:500]}...")
             

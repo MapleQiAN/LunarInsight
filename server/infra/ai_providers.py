@@ -101,12 +101,23 @@ class AnthropicClient(BaseAIClient):
             else:
                 user_messages.append(msg)
         
+        # 如果请求 JSON 模式，在 system prompt 中添加要求
+        if extra_params.get("json_mode"):
+            json_instruction = "\n\n重要：请确保返回的内容是有效的 JSON 格式，不要包含任何额外的文本或说明。"
+            if system_msg:
+                system_msg = system_msg + json_instruction
+            else:
+                system_msg = json_instruction.strip()
+        
         kwargs = {
             "model": self.model,
             "messages": user_messages,
             "temperature": temperature,
             "max_tokens": extra_params.get("max_tokens", 4096)
         }
+        
+        # 过滤掉 json_mode 参数
+        kwargs = {k: v for k, v in kwargs.items() if k != "json_mode"}
         
         if system_msg:
             kwargs["system"] = system_msg
@@ -132,11 +143,16 @@ class GoogleGeminiClient(BaseAIClient):
         temperature: float = 0.3,
         **extra_params
     ) -> str:
+        # 处理 json_mode 参数
+        params = {k: v for k, v in extra_params.items() if k != "json_mode"}
+        if extra_params.get("json_mode"):
+            params["response_format"] = {"type": "json_object"}
+        
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temperature,
-            **extra_params
+            **params
         )
         return response.choices[0].message.content
 
@@ -167,11 +183,16 @@ class OpenAICompatibleClient(BaseAIClient):
         temperature: float = 0.3,
         **extra_params
     ) -> str:
+        # 处理 json_mode 参数
+        params = {k: v for k, v in extra_params.items() if k != "json_mode"}
+        if extra_params.get("json_mode"):
+            params["response_format"] = {"type": "json_object"}
+        
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temperature,
-            **extra_params
+            **params
         )
         return response.choices[0].message.content
 
