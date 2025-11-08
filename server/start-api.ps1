@@ -40,20 +40,6 @@ if (-not (Test-Path "uploads")) {
     Write-Host "Uploads directory created" -ForegroundColor Green
 }
 
-# Ensure .env file exists
-if (-not (Test-Path ".env")) {
-    Write-Host ".env not found, creating default .env..." -ForegroundColor Yellow
-    @"
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASS=test1234
-REDIS_URL=redis://localhost:6379/0
-UPLOAD_DIR=./uploads
-OPENAI_API_KEY=
-"@ | Out-File -FilePath ".env" -Encoding utf8
-    Write-Host ".env created; please edit as needed" -ForegroundColor Green
-}
-
 Write-Host ""
 Write-Host "Starting API service..." -ForegroundColor Green
 Write-Host "API address: http://localhost:8000" -ForegroundColor Cyan
