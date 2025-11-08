@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -28,7 +27,12 @@ api.interceptors.response.use(
   },
   (error) => {
     const message = error.response?.data?.detail || error.message || '请求失败'
-    ElMessage.error(message)
+    // 使用 Naive UI 的全局消息 API
+    if (window.$message) {
+      window.$message.error(message)
+    } else {
+      console.error(message)
+    }
     return Promise.reject(error)
   }
 )

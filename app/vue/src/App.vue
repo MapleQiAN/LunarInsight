@@ -4,9 +4,7 @@
     <n-message-provider>
       <n-notification-provider>
         <n-dialog-provider>
-          <div id="app" class="app-container">
-            <router-view />
-          </div>
+          <AppContent />
         </n-dialog-provider>
       </n-notification-provider>
     </n-message-provider>
@@ -16,7 +14,8 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NConfigProvider, NMessageProvider, NNotificationProvider, NDialogProvider, NGlobalStyle, zhCN, enUS, dateZhCN, dateEnUS } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NNotificationProvider, NDialogProvider, NGlobalStyle, zhCN, enUS, dateZhCN, dateEnUS, useMessage } from 'naive-ui'
+import AppContent from './components/AppContent.vue'
 
 const { locale } = useI18n()
 const theme = ref(null) // null for light theme, darkTheme for dark theme

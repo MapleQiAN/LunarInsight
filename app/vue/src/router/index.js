@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useI18n } from 'vue-i18n'
+import i18n from '@/i18n'
 
 const routes = [
   {
@@ -46,8 +46,8 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const { t } = useI18n()
   if (to.meta.title) {
+    const t = i18n.global.t
     document.title = `${t(to.meta.title)} | ${t('app.page_title')}`
   }
   next()
