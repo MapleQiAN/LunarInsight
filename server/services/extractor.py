@@ -11,10 +11,37 @@ class TripletExtractor:
     
     def __init__(self):
         self.client = None
-        if settings.openai_api_key:
-            self.client = OpenAI(api_key=settings.openai_api_key)
+        self.provider = settings.ai_provider
+        self.model = None
+        
+        if self.provider == "openai":
+            if settings.openai_api_key:
+                self.client = OpenAI(
+                    api_key=settings.openai_api_key,
+                    base_url=settings.openai_base_url
+                )
+                self.model = settings.openai_model
+                print(f"✅ 使用 OpenAI API，模型: {self.model}")
+            else:
+                print("⚠️  警告: OPENAI_API_KEY 未设置，将使用 mock 模式")
+                self.provider = "mock"
+        
+        elif self.provider == "ollama":
+            try:
+                # Ollama使用OpenAI兼容的API
+                self.client = OpenAI(
+                    base_url=f"{settings.ollama_base_url}/v1",
+                    api_key="ollama"  # Ollama不需要真实的API key
+                )
+                self.model = settings.ollama_model
+                print(f"✅ 使用 Ollama，地址: {settings.ollama_base_url}，模型: {self.model}")
+            except Exception as e:
+                print(f"⚠️  警告: 无法连接到 Ollama ({e})，将使用 mock 模式")
+                self.provider = "mock"
+                self.client = None
+        
         else:
-            print("Warning: OPENAI_API_KEY not set. Triplet extraction will use mock mode.")
+            print("ℹ️  使用 mock 模式进行三元组提取")
     
     def extract(self, chunk: Chunk) -> List[Triplet]:
         """
@@ -26,16 +53,17 @@ class TripletExtractor:
         Returns:
             List of Triplet objects
         """
-        if not self.client:
+        if not self.client or self.provider == "mock":
             # Mock mode: return empty list or simple extraction
             return self._mock_extract(chunk)
         
         prompt = self._build_prompt(chunk.text)
         
         try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
+            # 根据provider调整参数
+            completion_params = {
+                "model": self.model,
+                "messages": [
                     {
                         "role": "system",
                         "content": "You are a knowledge extraction expert. Extract subject-predicate-object triplets from the given text. Return only valid JSON array."
@@ -45,9 +73,14 @@ class TripletExtractor:
                         "content": prompt
                     }
                 ],
-                temperature=0.3,
-                response_format={"type": "json_object"}
-            )
+                "temperature": 0.3,
+            }
+            
+            # OpenAI支持response_format，Ollama可能不支持
+            if self.provider == "openai":
+                completion_params["response_format"] = {"type": "json_object"}
+            
+            response = self.client.chat.completions.create(**completion_params)
             
             result = json.loads(response.choices[0].message.content)
             triplets = result.get("triplets", [])

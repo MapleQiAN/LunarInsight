@@ -189,3 +189,94 @@ async def get_edges(
     
     return edges
 
+
+@router.get("/stats")
+async def get_graph_stats():
+    """Get knowledge graph statistics."""
+    try:
+        # Get total counts
+        stats_query = """
+        MATCH (d:Document)
+        WITH count(d) as totalDocs
+        MATCH (c:Concept)
+        WITH totalDocs, count(c) as totalConcepts
+        MATCH ()-[r]->()
+        RETURN 
+            totalDocs,
+            totalConcepts,
+            count(r) as totalRelations
+        """
+        stats_result = neo4j_client.execute_query(stats_query)
+        
+        if not stats_result:
+            return {
+                "totalDocuments": 0,
+                "totalConcepts": 0,
+                "totalRelations": 0,
+                "recentDocuments": [],
+                "topConcepts": [],
+                "relationTypes": []
+            }
+        
+        stats = stats_result[0]
+        
+        # Get recent documents
+        recent_docs_query = """
+        MATCH (d:Document)
+        RETURN d.id as id, d.filename as filename, d.created_at as createdAt, d.kind as kind
+        ORDER BY d.created_at DESC
+        LIMIT 5
+        """
+        recent_docs = neo4j_client.execute_query(recent_docs_query)
+        
+        # Get top concepts by connection count
+        top_concepts_query = """
+        MATCH (c:Concept)
+        OPTIONAL MATCH (c)-[r]-()
+        WITH c, count(r) as connections
+        RETURN c.name as name, c.domain as domain, connections
+        ORDER BY connections DESC
+        LIMIT 10
+        """
+        top_concepts = neo4j_client.execute_query(top_concepts_query)
+        
+        # Get relation type distribution
+        relation_types_query = """
+        MATCH ()-[r]->()
+        RETURN type(r) as type, count(r) as count
+        ORDER BY count DESC
+        """
+        relation_types = neo4j_client.execute_query(relation_types_query)
+        
+        return {
+            "totalDocuments": stats.get("totalDocs", 0),
+            "totalConcepts": stats.get("totalConcepts", 0),
+            "totalRelations": stats.get("totalRelations", 0),
+            "recentDocuments": [
+                {
+                    "id": doc.get("id"),
+                    "filename": doc.get("filename"),
+                    "createdAt": doc.get("createdAt"),
+                    "kind": doc.get("kind")
+                }
+                for doc in recent_docs
+            ],
+            "topConcepts": [
+                {
+                    "name": concept.get("name"),
+                    "domain": concept.get("domain"),
+                    "connections": concept.get("connections", 0)
+                }
+                for concept in top_concepts
+            ],
+            "relationTypes": [
+                {
+                    "type": rt.get("type"),
+                    "count": rt.get("count", 0)
+                }
+                for rt in relation_types
+            ]
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")

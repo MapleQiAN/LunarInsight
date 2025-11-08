@@ -1,6 +1,6 @@
 """Configuration management for LunarInsight."""
 import os
-from typing import Optional
+from typing import Optional, Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,8 +23,17 @@ class Settings(BaseSettings):
     # Redis Configuration
     redis_url: str = "redis://localhost:6379/0"
     
+    # AI Provider Configuration
+    ai_provider: Literal["openai", "ollama", "mock"] = "mock"
+    
     # OpenAI Configuration
     openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-4o-mini"
+    openai_base_url: Optional[str] = None  # 可自定义OpenAI API地址
+    
+    # Ollama Configuration
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3"
     
     # File Upload Configuration
     upload_dir: str = "./uploads"
