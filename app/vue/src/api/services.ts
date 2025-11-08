@@ -249,3 +249,52 @@ export const testAIConnection = (settings: AISettings): Promise<any> =>
 export const getOllamaModels = (): Promise<{ success: boolean; models: string[]; message?: string }> => 
   api.get('/settings/ollama/models')
 
+// ========== Graph CRUD Operations ==========
+
+// Node CRUD
+export interface NodeCreate {
+  labels: string[]
+  properties: Record<string, any>
+}
+
+export interface NodeUpdate {
+  labels?: string[]
+  properties: Record<string, any>
+  remove_properties?: string[]
+}
+
+export const createNode = (data: NodeCreate): Promise<GraphNode> => 
+  api.post('/graph/nodes', data)
+
+export const getNode = (nodeId: string): Promise<GraphNode> => 
+  api.get(`/graph/nodes/${nodeId}`)
+
+export const updateNode = (nodeId: string, data: NodeUpdate): Promise<GraphNode> => 
+  api.put(`/graph/nodes/${nodeId}`, data)
+
+export const deleteNode = (nodeId: string, force: boolean = false): Promise<void> => 
+  api.delete(`/graph/nodes/${nodeId}`, { params: { force } })
+
+// Edge CRUD
+export interface EdgeCreate {
+  source: string
+  target: string
+  type: string
+  properties?: Record<string, any>
+}
+
+export interface EdgeUpdate {
+  type?: string
+  properties?: Record<string, any>
+  remove_properties?: string[]
+}
+
+export const createEdge = (data: EdgeCreate): Promise<GraphEdge> => 
+  api.post('/graph/edges', data)
+
+export const updateEdge = (sourceId: string, targetId: string, relType: string, data: EdgeUpdate): Promise<GraphEdge> => 
+  api.put(`/graph/edges/${sourceId}/${targetId}/${relType}`, data)
+
+export const deleteEdge = (sourceId: string, targetId: string, relType: string): Promise<void> => 
+  api.delete(`/graph/edges/${sourceId}/${targetId}/${relType}`)
+

@@ -53,6 +53,23 @@
 
           <n-divider vertical />
 
+          <!-- Quick Actions -->
+          <n-button type="success" @click="handleCreateNode" :disabled="!cy">
+            <template #icon>
+              <n-icon><add-outline /></n-icon>
+            </template>
+            创建节点
+          </n-button>
+
+          <n-button @click="handleCreateEdge" :disabled="!cy">
+            <template #icon>
+              <n-icon><link-outline /></n-icon>
+            </template>
+            创建关系
+          </n-button>
+
+          <n-divider vertical />
+
           <!-- Graph Controls -->
           <n-button-group>
             <n-button @click="zoomIn" :disabled="!cy">
@@ -175,6 +192,141 @@
           </div>
         </n-drawer-content>
       </n-drawer>
+
+      <!-- Context Menu -->
+      <div
+        v-if="contextMenuVisible"
+        class="context-menu"
+        :style="{
+          left: contextMenuPosition.x + 'px',
+          top: contextMenuPosition.y + 'px'
+        }"
+      >
+        <div v-if="contextMenuType === 'node'" class="context-menu-items">
+          <div class="context-menu-item" @click="handleEditNode">
+            <n-icon :component="CreateOutline" />
+            <span>编辑节点</span>
+          </div>
+          <div class="context-menu-item" @click="handleCreateEdge">
+            <n-icon :component="LinkOutline" />
+            <span>创建关系</span>
+          </div>
+          <n-divider style="margin: 4px 0" />
+          <div class="context-menu-item danger" @click="handleDeleteNode">
+            <n-icon :component="TrashOutline" />
+            <span>删除节点</span>
+          </div>
+        </div>
+
+        <div v-if="contextMenuType === 'edge'" class="context-menu-items">
+          <div class="context-menu-item danger" @click="handleDeleteEdge">
+            <n-icon :component="TrashOutline" />
+            <span>删除关系</span>
+          </div>
+        </div>
+
+        <div v-if="contextMenuType === 'canvas'" class="context-menu-items">
+          <div class="context-menu-item" @click="handleCreateNode">
+            <n-icon :component="AddOutline" />
+            <span>创建节点</span>
+          </div>
+          <div class="context-menu-item" @click="handleCreateEdge">
+            <n-icon :component="LinkOutline" />
+            <span>创建关系</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node Edit Modal -->
+      <n-modal v-model:show="showNodeEditModal" preset="dialog" title="编辑节点" style="width: 600px">
+        <n-form :model="nodeEditForm" label-placement="left" label-width="100px">
+          <n-form-item label="节点 ID">
+            <n-input :value="nodeEditForm.id" disabled />
+          </n-form-item>
+          <n-form-item label="标签">
+            <n-dynamic-tags v-model:value="nodeEditForm.labels" />
+          </n-form-item>
+          <n-form-item label="属性">
+            <div style="width: 100%">
+              <div v-for="(value, key) in nodeEditForm.properties" :key="key" style="display: flex; gap: 8px; margin-bottom: 8px">
+                <n-input :value="String(key)" disabled style="width: 150px" />
+                <n-input v-model:value="nodeEditForm.properties[key]" style="flex: 1" />
+              </div>
+            </div>
+          </n-form-item>
+        </n-form>
+        <template #action>
+          <n-space>
+            <n-button @click="showNodeEditModal = false">取消</n-button>
+            <n-button type="primary" @click="submitNodeEdit">保存</n-button>
+          </n-space>
+        </template>
+      </n-modal>
+
+      <!-- Node Create Modal -->
+      <n-modal v-model:show="showNodeCreateModal" preset="dialog" title="创建节点" style="width: 600px">
+        <n-form :model="nodeCreateForm" label-placement="left" label-width="100px">
+          <n-form-item label="标签">
+            <n-dynamic-tags v-model:value="nodeCreateForm.labels" />
+          </n-form-item>
+          <n-form-item label="节点名称" required>
+            <n-input v-model:value="nodeCreateForm.properties.name" placeholder="输入节点名称" />
+          </n-form-item>
+          <n-form-item label="描述">
+            <n-input
+              v-model:value="nodeCreateForm.properties.description"
+              type="textarea"
+              placeholder="输入节点描述（可选）"
+              :autosize="{ minRows: 3, maxRows: 6 }"
+            />
+          </n-form-item>
+        </n-form>
+        <template #action>
+          <n-space>
+            <n-button @click="showNodeCreateModal = false">取消</n-button>
+            <n-button type="primary" @click="submitNodeCreate">创建</n-button>
+          </n-space>
+        </template>
+      </n-modal>
+
+      <!-- Edge Create Modal -->
+      <n-modal v-model:show="showEdgeCreateModal" preset="dialog" title="创建关系" style="width: 600px">
+        <n-form :model="edgeCreateForm" label-placement="left" label-width="100px">
+          <n-form-item label="源节点" required>
+            <n-select
+              v-model:value="edgeCreateForm.source"
+              :options="availableNodes"
+              filterable
+              placeholder="选择源节点"
+            />
+          </n-form-item>
+          <n-form-item label="目标节点" required>
+            <n-select
+              v-model:value="edgeCreateForm.target"
+              :options="availableNodes"
+              filterable
+              placeholder="选择目标节点"
+            />
+          </n-form-item>
+          <n-form-item label="关系类型" required>
+            <n-input v-model:value="edgeCreateForm.type" placeholder="如：RELATES_TO, DEPENDS_ON" />
+          </n-form-item>
+          <n-form-item label="描述">
+            <n-input
+              v-model:value="edgeCreateForm.properties.description"
+              type="textarea"
+              placeholder="输入关系描述（可选）"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+            />
+          </n-form-item>
+        </n-form>
+        <template #action>
+          <n-space>
+            <n-button @click="showEdgeCreateModal = false">取消</n-button>
+            <n-button type="primary" @click="submitEdgeCreate">创建</n-button>
+          </n-space>
+        </template>
+      </n-modal>
     </n-card>
   </div>
 </template>
@@ -182,7 +334,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useMessage } from 'naive-ui'
+import { useMessage, useDialog } from 'naive-ui'
 import {
   RefreshOutline,
   LayersOutline,
@@ -194,16 +346,31 @@ import {
   DownloadOutline,
   CubeOutline,
   GitNetworkOutline,
-  InformationCircleOutline
+  InformationCircleOutline,
+  CreateOutline,
+  TrashOutline,
+  LinkOutline
 } from '@vicons/ionicons5'
 import cytoscape from 'cytoscape'
 import dagre from 'cytoscape-dagre'
-import { getGraphData } from '@/api/services'
+import { 
+  getGraphData, 
+  createNode, 
+  updateNode, 
+  deleteNode, 
+  createEdge, 
+  updateEdge,
+  deleteEdge,
+  type NodeCreate,
+  type NodeUpdate,
+  type EdgeCreate
+} from '@/api/services'
 
 cytoscape.use(dagre)
 
 const { t } = useI18n()
 const message = useMessage()
+const dialog = useDialog()
 const nodeLimit = ref(100)
 const loading = ref(false)
 const graphContainer = ref(null)
@@ -211,7 +378,35 @@ const graphData = ref(null)
 const layoutType = ref('dagre')
 const selectedNode = ref(null)
 const showNodeDetail = ref(false)
+const showNodeEditModal = ref(false)
+const showNodeCreateModal = ref(false)
+const showEdgeCreateModal = ref(false)
+const contextMenuVisible = ref(false)
+const contextMenuPosition = ref({ x: 0, y: 0 })
+const contextMenuTarget = ref(null)
+const contextMenuType = ref<'node' | 'edge' | 'canvas'>('canvas')
 let cy = null
+
+// Form data
+const nodeEditForm = ref({
+  id: '',
+  labels: [] as string[],
+  properties: {} as Record<string, any>
+})
+
+const nodeCreateForm = ref({
+  labels: ['Concept'] as string[],
+  properties: {
+    name: ''
+  } as Record<string, any>
+})
+
+const edgeCreateForm = ref({
+  source: '',
+  target: '',
+  type: 'RELATES_TO',
+  properties: {} as Record<string, any>
+})
 
 // Layout options
 const layoutOptions = [
@@ -380,6 +575,62 @@ const renderGraph = () => {
     }
     showNodeDetail.value = true
   })
+
+  // Right-click context menu
+  cy.on('cxttap', 'node', (evt) => {
+    evt.preventDefault()
+    const node = evt.target
+    const position = evt.renderedPosition || evt.position
+    contextMenuType.value = 'node'
+    contextMenuTarget.value = {
+      id: node.id(),
+      labels: node.classes(),
+      properties: node.data()
+    }
+    contextMenuPosition.value = {
+      x: position.x,
+      y: position.y
+    }
+    contextMenuVisible.value = true
+  })
+
+  cy.on('cxttap', 'edge', (evt) => {
+    evt.preventDefault()
+    const edge = evt.target
+    const position = evt.renderedPosition || evt.position
+    contextMenuType.value = 'edge'
+    contextMenuTarget.value = {
+      id: edge.id(),
+      source: edge.data('source'),
+      target: edge.data('target'),
+      type: edge.data('label'),
+      properties: edge.data()
+    }
+    contextMenuPosition.value = {
+      x: position.x,
+      y: position.y
+    }
+    contextMenuVisible.value = true
+  })
+
+  cy.on('cxttap', (evt) => {
+    if (evt.target === cy) {
+      evt.preventDefault()
+      const position = evt.renderedPosition || evt.position
+      contextMenuType.value = 'canvas'
+      contextMenuTarget.value = null
+      contextMenuPosition.value = {
+        x: position.x,
+        y: position.y
+      }
+      contextMenuVisible.value = true
+    }
+  })
+
+  // Close context menu on left click
+  cy.on('tap', () => {
+    contextMenuVisible.value = false
+  })
 }
 
 // Graph control functions
@@ -430,6 +681,173 @@ const exportGraph = () => {
   
   message.success('图谱已导出')
 }
+
+// ========== Node CRUD Operations ==========
+
+const handleEditNode = () => {
+  if (!contextMenuTarget.value) return
+  
+  nodeEditForm.value = {
+    id: contextMenuTarget.value.id,
+    labels: contextMenuTarget.value.labels || [],
+    properties: { ...contextMenuTarget.value.properties }
+  }
+  
+  showNodeEditModal.value = true
+  contextMenuVisible.value = false
+}
+
+const handleCreateNode = () => {
+  nodeCreateForm.value = {
+    labels: ['Concept'],
+    properties: {
+      name: ''
+    }
+  }
+  
+  showNodeCreateModal.value = true
+  contextMenuVisible.value = false
+}
+
+const handleDeleteNode = () => {
+  if (!contextMenuTarget.value) return
+  
+  dialog.warning({
+    title: '确认删除节点',
+    content: `确定要删除节点 "${contextMenuTarget.value.properties.name || contextMenuTarget.value.id}" 吗？`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deleteNode(contextMenuTarget.value.id, true)
+        message.success('节点已删除')
+        await loadGraph()
+      } catch (error) {
+        message.error('删除节点失败：' + (error.response?.data?.detail || error.message))
+      }
+    }
+  })
+  
+  contextMenuVisible.value = false
+}
+
+const submitNodeEdit = async () => {
+  try {
+    const updateData: NodeUpdate = {
+      labels: nodeEditForm.value.labels.length > 0 ? nodeEditForm.value.labels : undefined,
+      properties: nodeEditForm.value.properties
+    }
+    
+    await updateNode(nodeEditForm.value.id, updateData)
+    message.success('节点已更新')
+    showNodeEditModal.value = false
+    await loadGraph()
+  } catch (error) {
+    message.error('更新节点失败：' + (error.response?.data?.detail || error.message))
+  }
+}
+
+const submitNodeCreate = async () => {
+  try {
+    if (!nodeCreateForm.value.properties.name) {
+      message.error('请输入节点名称')
+      return
+    }
+    
+    const createData: NodeCreate = {
+      labels: nodeCreateForm.value.labels,
+      properties: nodeCreateForm.value.properties
+    }
+    
+    await createNode(createData)
+    message.success('节点已创建')
+    showNodeCreateModal.value = false
+    await loadGraph()
+  } catch (error) {
+    message.error('创建节点失败：' + (error.response?.data?.detail || error.message))
+  }
+}
+
+// ========== Edge CRUD Operations ==========
+
+const handleCreateEdge = () => {
+  if (contextMenuType.value === 'node' && contextMenuTarget.value) {
+    edgeCreateForm.value.source = contextMenuTarget.value.id
+    edgeCreateForm.value.target = ''
+  } else {
+    edgeCreateForm.value.source = ''
+    edgeCreateForm.value.target = ''
+  }
+  
+  edgeCreateForm.value.type = 'RELATES_TO'
+  edgeCreateForm.value.properties = {}
+  
+  showEdgeCreateModal.value = true
+  contextMenuVisible.value = false
+}
+
+const handleDeleteEdge = () => {
+  if (!contextMenuTarget.value) return
+  
+  dialog.warning({
+    title: '确认删除关系',
+    content: `确定要删除 "${contextMenuTarget.value.source}" 到 "${contextMenuTarget.value.target}" 的 "${contextMenuTarget.value.type}" 关系吗？`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deleteEdge(
+          contextMenuTarget.value.source,
+          contextMenuTarget.value.target,
+          contextMenuTarget.value.type
+        )
+        message.success('关系已删除')
+        await loadGraph()
+      } catch (error) {
+        message.error('删除关系失败：' + (error.response?.data?.detail || error.message))
+      }
+    }
+  })
+  
+  contextMenuVisible.value = false
+}
+
+const submitEdgeCreate = async () => {
+  try {
+    if (!edgeCreateForm.value.source || !edgeCreateForm.value.target) {
+      message.error('请选择源节点和目标节点')
+      return
+    }
+    
+    if (!edgeCreateForm.value.type) {
+      message.error('请输入关系类型')
+      return
+    }
+    
+    const createData: EdgeCreate = {
+      source: edgeCreateForm.value.source,
+      target: edgeCreateForm.value.target,
+      type: edgeCreateForm.value.type,
+      properties: edgeCreateForm.value.properties
+    }
+    
+    await createEdge(createData)
+    message.success('关系已创建')
+    showEdgeCreateModal.value = false
+    await loadGraph()
+  } catch (error) {
+    message.error('创建关系失败：' + (error.response?.data?.detail || error.message))
+  }
+}
+
+// Available nodes for edge creation
+const availableNodes = computed(() => {
+  if (!graphData.value) return []
+  return graphData.value.nodes.map((node: any) => ({
+    label: node.data.label || node.data.id,
+    value: node.data.id
+  }))
+})
 
 onMounted(() => {
   loadGraph()
@@ -911,7 +1329,7 @@ onUnmounted(() => {
   }
 }
 
-// Button Group 样式增强
+  // Button Group 样式增强
 :deep(.n-button-group) {
   border-radius: 16px;
   overflow: hidden;
@@ -929,6 +1347,98 @@ onUnmounted(() => {
       border-top-right-radius: 16px;
       border-bottom-right-radius: 16px;
     }
+  }
+}
+
+// Context Menu 样式
+.context-menu {
+  position: fixed;
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.98) 0%, 
+    rgba(248, 250, 252, 0.98) 100%);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.15),
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  padding: 8px;
+  z-index: 1000;
+  min-width: 180px;
+
+  .context-menu-items {
+    .context-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+      font-weight: 500;
+      color: #334155;
+
+      .n-icon {
+        font-size: 18px;
+        color: #64748b;
+      }
+
+      &:hover {
+        background: rgba(16, 185, 129, 0.08);
+        color: #10b981;
+
+        .n-icon {
+          color: #10b981;
+        }
+      }
+
+      &.danger {
+        &:hover {
+          background: rgba(239, 68, 68, 0.08);
+          color: #ef4444;
+
+          .n-icon {
+            color: #ef4444;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Modal 样式增强
+:deep(.n-modal) {
+  .n-dialog {
+    border-radius: 24px;
+    overflow: hidden;
+
+    .n-dialog__title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+  }
+
+  .n-form-item {
+    margin-bottom: 20px;
+
+    .n-form-item-label {
+      font-weight: 600;
+      color: #475569;
+    }
+  }
+
+  .n-input,
+  .n-select,
+  .n-input-number {
+    border-radius: 12px;
+  }
+
+  .n-button {
+    border-radius: 12px;
+    font-weight: 600;
   }
 }
 </style>

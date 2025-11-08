@@ -31,3 +31,30 @@ class GraphResponse(BaseModel):
     edges: List[Edge]
     stats: Optional[Dict[str, Any]] = None
 
+
+class NodeCreate(BaseModel):
+    """Node creation request model."""
+    labels: List[str] = Field(..., description="Node labels", min_length=1)
+    properties: Dict[str, Any] = Field(default_factory=dict, description="Node properties")
+
+
+class NodeUpdate(BaseModel):
+    """Node update request model."""
+    labels: Optional[List[str]] = Field(None, description="New labels (replaces existing)")
+    properties: Dict[str, Any] = Field(..., description="Properties to update (merge with existing)")
+    remove_properties: Optional[List[str]] = Field(None, description="Properties to remove")
+
+
+class EdgeCreate(BaseModel):
+    """Edge creation request model."""
+    source: str = Field(..., description="Source node ID")
+    target: str = Field(..., description="Target node ID")
+    type: str = Field(..., description="Relationship type")
+    properties: Dict[str, Any] = Field(default_factory=dict, description="Relationship properties")
+
+
+class EdgeUpdate(BaseModel):
+    """Edge update request model."""
+    type: Optional[str] = Field(None, description="New relationship type")
+    properties: Dict[str, Any] = Field(default_factory=dict, description="Properties to update")
+    remove_properties: Optional[List[str]] = Field(None, description="Properties to remove")

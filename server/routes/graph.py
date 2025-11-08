@@ -1,8 +1,8 @@
 """Graph query routes."""
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 from typing import Optional, List, Dict, Any
 from infra.neo4j_client import neo4j_client
-from models.graph import GraphQuery, GraphResponse, Node, Edge
+from models.graph import GraphQuery, GraphResponse, Node, Edge, NodeCreate, NodeUpdate, EdgeCreate, EdgeUpdate
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 
@@ -492,3 +492,502 @@ async def get_graph_stats():
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+# ========== Node CRUD Operations ==========
+
+@router.post("/nodes", response_model=Node, status_code=201)
+async def create_node(node_data: NodeCreate = Body(...)):
+    """
+    创建新节点。
+    
+    Args:
+        node_data: 节点数据（标签和属性）
+        
+    Returns:
+        创建的节点
+    """
+    try:
+        import uuid
+        from datetime import datetime
+        
+        # Generate unique ID if not provided
+        if "id" not in node_data.properties:
+            node_data.properties["id"] = str(uuid.uuid4())
+        
+        # Add creation timestamp
+        if "created_at" not in node_data.properties:
+            node_data.properties["created_at"] = datetime.now().isoformat()
+        
+        # Build labels string
+        labels_str = ":".join(node_data.labels)
+        
+        # Build properties
+        props_dict = node_data.properties
+        
+        # Create node
+        query = f"""
+        CREATE (n:{labels_str})
+        SET n = $props
+        RETURN n
+        """
+        
+        results = neo4j_client.execute_query(query, {"props": props_dict})
+        
+        if not results:
+            raise HTTPException(status_code=500, detail="Failed to create node")
+        
+        node = results[0]["n"]
+        props = dict(node) if hasattr(node, "__getitem__") else {}
+        labels = list(node.labels) if hasattr(node, "labels") else []
+        
+        return Node(
+            id=str(props.get("id")),
+            labels=labels,
+            properties=props
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create node: {str(e)}")
+
+
+@router.get("/nodes/{node_id}", response_model=Node)
+async def get_node(node_id: str):
+    """
+    获取指定节点。
+    
+    Args:
+        node_id: 节点 ID
+        
+    Returns:
+        节点数据
+    """
+    try:
+        # Try to find by id property first, then by name
+        query = """
+        MATCH (n)
+        WHERE n.id = $node_id OR n.name = $node_id
+        RETURN n
+        LIMIT 1
+        """
+        
+        results = neo4j_client.execute_query(query, {"node_id": node_id})
+        
+        if not results:
+            raise HTTPException(status_code=404, detail="Node not found")
+        
+        node = results[0]["n"]
+        props = dict(node) if hasattr(node, "__getitem__") else {}
+        labels = list(node.labels) if hasattr(node, "labels") else []
+        
+        return Node(
+            id=str(props.get("id") or props.get("name") or node_id),
+            labels=labels,
+            properties=props
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get node: {str(e)}")
+
+
+@router.put("/nodes/{node_id}", response_model=Node)
+async def update_node(node_id: str, node_data: NodeUpdate = Body(...)):
+    """
+    更新节点。
+    
+    Args:
+        node_id: 节点 ID
+        node_data: 更新数据
+        
+    Returns:
+        更新后的节点
+    """
+    try:
+        from datetime import datetime
+        
+        # Check if node exists
+        check_query = """
+        MATCH (n)
+        WHERE n.id = $node_id OR n.name = $node_id
+        RETURN n
+        LIMIT 1
+        """
+        check_results = neo4j_client.execute_query(check_query, {"node_id": node_id})
+        
+        if not check_results:
+            raise HTTPException(status_code=404, detail="Node not found")
+        
+        # Build update query
+        updates = []
+        params = {"node_id": node_id}
+        
+        # Update labels if provided
+        if node_data.labels:
+            labels_str = ":".join(node_data.labels)
+            # Remove old labels and set new ones
+            query_parts = [
+                f"""
+                MATCH (n)
+                WHERE n.id = $node_id OR n.name = $node_id
+                REMOVE n:{":".join(list(check_results[0]["n"].labels))}
+                SET n:{labels_str}
+                """
+            ]
+        else:
+            query_parts = [
+                """
+                MATCH (n)
+                WHERE n.id = $node_id OR n.name = $node_id
+                """
+            ]
+        
+        # Update properties
+        if node_data.properties:
+            node_data.properties["updated_at"] = datetime.now().isoformat()
+            params["props"] = node_data.properties
+            query_parts.append("SET n += $props")
+        
+        # Remove properties
+        if node_data.remove_properties:
+            for prop in node_data.remove_properties:
+                query_parts.append(f"REMOVE n.{prop}")
+        
+        query_parts.append("RETURN n")
+        query = "\n".join(query_parts)
+        
+        results = neo4j_client.execute_query(query, params)
+        
+        if not results:
+            raise HTTPException(status_code=500, detail="Failed to update node")
+        
+        node = results[0]["n"]
+        props = dict(node) if hasattr(node, "__getitem__") else {}
+        labels = list(node.labels) if hasattr(node, "labels") else []
+        
+        return Node(
+            id=str(props.get("id") or props.get("name") or node_id),
+            labels=labels,
+            properties=props
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update node: {str(e)}")
+
+
+@router.delete("/nodes/{node_id}", status_code=204)
+async def delete_node(node_id: str, force: bool = Query(False, description="Force delete with relationships")):
+    """
+    删除节点。
+    
+    Args:
+        node_id: 节点 ID
+        force: 是否强制删除（包括关系）
+        
+    Returns:
+        无内容
+    """
+    try:
+        # Check if node exists
+        check_query = """
+        MATCH (n)
+        WHERE n.id = $node_id OR n.name = $node_id
+        RETURN n
+        LIMIT 1
+        """
+        check_results = neo4j_client.execute_query(check_query, {"node_id": node_id})
+        
+        if not check_results:
+            raise HTTPException(status_code=404, detail="Node not found")
+        
+        # Check for relationships if not force delete
+        if not force:
+            rel_check_query = """
+            MATCH (n)-[r]-()
+            WHERE n.id = $node_id OR n.name = $node_id
+            RETURN count(r) as rel_count
+            """
+            rel_results = neo4j_client.execute_query(rel_check_query, {"node_id": node_id})
+            
+            if rel_results and rel_results[0].get("rel_count", 0) > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Node has relationships. Use force=true to delete with relationships."
+                )
+        
+        # Delete node (and relationships if force)
+        if force:
+            delete_query = """
+            MATCH (n)
+            WHERE n.id = $node_id OR n.name = $node_id
+            DETACH DELETE n
+            """
+        else:
+            delete_query = """
+            MATCH (n)
+            WHERE n.id = $node_id OR n.name = $node_id
+            DELETE n
+            """
+        
+        neo4j_client.execute_query(delete_query, {"node_id": node_id})
+        
+        return None
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete node: {str(e)}")
+
+
+# ========== Edge (Relationship) CRUD Operations ==========
+
+@router.post("/edges", response_model=Edge, status_code=201)
+async def create_edge(edge_data: EdgeCreate = Body(...)):
+    """
+    创建新关系。
+    
+    Args:
+        edge_data: 关系数据
+        
+    Returns:
+        创建的关系
+    """
+    try:
+        from datetime import datetime
+        
+        # Check if source and target nodes exist
+        check_query = """
+        MATCH (s)
+        WHERE s.id = $source_id OR s.name = $source_id
+        MATCH (t)
+        WHERE t.id = $target_id OR t.name = $target_id
+        RETURN s, t
+        """
+        check_results = neo4j_client.execute_query(check_query, {
+            "source_id": edge_data.source,
+            "target_id": edge_data.target
+        })
+        
+        if not check_results:
+            raise HTTPException(status_code=404, detail="Source or target node not found")
+        
+        # Add creation timestamp
+        props = edge_data.properties.copy()
+        if "created_at" not in props:
+            props["created_at"] = datetime.now().isoformat()
+        
+        # Create relationship
+        query = f"""
+        MATCH (s)
+        WHERE s.id = $source_id OR s.name = $source_id
+        MATCH (t)
+        WHERE t.id = $target_id OR t.name = $target_id
+        CREATE (s)-[r:{edge_data.type}]->(t)
+        SET r = $props
+        RETURN s, r, t
+        """
+        
+        results = neo4j_client.execute_query(query, {
+            "source_id": edge_data.source,
+            "target_id": edge_data.target,
+            "props": props
+        })
+        
+        if not results:
+            raise HTTPException(status_code=500, detail="Failed to create relationship")
+        
+        rel = results[0]["r"]
+        source_node = results[0]["s"]
+        target_node = results[0]["t"]
+        
+        # Get IDs
+        source_props = dict(source_node) if hasattr(source_node, "__getitem__") else {}
+        source_id = source_props.get("id") or source_props.get("name") or edge_data.source
+        
+        target_props = dict(target_node) if hasattr(target_node, "__getitem__") else {}
+        target_id = target_props.get("id") or target_props.get("name") or edge_data.target
+        
+        rel_type = rel.type if hasattr(rel, "type") else edge_data.type
+        rel_props = dict(rel) if hasattr(rel, "__getitem__") else {}
+        
+        # Generate edge ID
+        edge_id = f"{source_id}-{rel_type}-{target_id}"
+        
+        return Edge(
+            id=edge_id,
+            source=str(source_id),
+            target=str(target_id),
+            type=rel_type,
+            properties=rel_props
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create relationship: {str(e)}")
+
+
+@router.put("/edges/{source_id}/{target_id}/{rel_type}", response_model=Edge)
+async def update_edge(
+    source_id: str,
+    target_id: str,
+    rel_type: str,
+    edge_data: EdgeUpdate = Body(...)
+):
+    """
+    更新关系。
+    
+    Args:
+        source_id: 源节点 ID
+        target_id: 目标节点 ID
+        rel_type: 关系类型
+        edge_data: 更新数据
+        
+    Returns:
+        更新后的关系
+    """
+    try:
+        from datetime import datetime
+        
+        # Check if relationship exists
+        check_query = f"""
+        MATCH (s)-[r:{rel_type}]->(t)
+        WHERE (s.id = $source_id OR s.name = $source_id)
+          AND (t.id = $target_id OR t.name = $target_id)
+        RETURN r
+        LIMIT 1
+        """
+        check_results = neo4j_client.execute_query(check_query, {
+            "source_id": source_id,
+            "target_id": target_id
+        })
+        
+        if not check_results:
+            raise HTTPException(status_code=404, detail="Relationship not found")
+        
+        # Update properties
+        updates = []
+        params = {
+            "source_id": source_id,
+            "target_id": target_id
+        }
+        
+        if edge_data.properties:
+            edge_data.properties["updated_at"] = datetime.now().isoformat()
+            params["props"] = edge_data.properties
+            updates.append("SET r += $props")
+        
+        # Remove properties
+        if edge_data.remove_properties:
+            for prop in edge_data.remove_properties:
+                updates.append(f"REMOVE r.{prop}")
+        
+        # Handle type change (requires recreating the relationship)
+        if edge_data.type and edge_data.type != rel_type:
+            query = f"""
+            MATCH (s)-[r:{rel_type}]->(t)
+            WHERE (s.id = $source_id OR s.name = $source_id)
+              AND (t.id = $target_id OR t.name = $target_id)
+            WITH s, t, properties(r) as props
+            DELETE r
+            CREATE (s)-[new_r:{edge_data.type}]->(t)
+            SET new_r = props
+            {" ".join(updates).replace("r.", "new_r.").replace("r +=", "new_r +=")}
+            RETURN s, new_r as r, t
+            """
+        else:
+            query = f"""
+            MATCH (s)-[r:{rel_type}]->(t)
+            WHERE (s.id = $source_id OR s.name = $source_id)
+              AND (t.id = $target_id OR t.name = $target_id)
+            {" ".join(updates)}
+            RETURN s, r, t
+            """
+        
+        results = neo4j_client.execute_query(query, params)
+        
+        if not results:
+            raise HTTPException(status_code=500, detail="Failed to update relationship")
+        
+        rel = results[0]["r"]
+        source_node = results[0]["s"]
+        target_node = results[0]["t"]
+        
+        # Get IDs
+        source_props = dict(source_node) if hasattr(source_node, "__getitem__") else {}
+        actual_source_id = source_props.get("id") or source_props.get("name") or source_id
+        
+        target_props = dict(target_node) if hasattr(target_node, "__getitem__") else {}
+        actual_target_id = target_props.get("id") or target_props.get("name") or target_id
+        
+        rel_type_actual = rel.type if hasattr(rel, "type") else (edge_data.type or rel_type)
+        rel_props = dict(rel) if hasattr(rel, "__getitem__") else {}
+        
+        edge_id = f"{actual_source_id}-{rel_type_actual}-{actual_target_id}"
+        
+        return Edge(
+            id=edge_id,
+            source=str(actual_source_id),
+            target=str(actual_target_id),
+            type=rel_type_actual,
+            properties=rel_props
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update relationship: {str(e)}")
+
+
+@router.delete("/edges/{source_id}/{target_id}/{rel_type}", status_code=204)
+async def delete_edge(source_id: str, target_id: str, rel_type: str):
+    """
+    删除关系。
+    
+    Args:
+        source_id: 源节点 ID
+        target_id: 目标节点 ID
+        rel_type: 关系类型
+        
+    Returns:
+        无内容
+    """
+    try:
+        # Check if relationship exists
+        check_query = f"""
+        MATCH (s)-[r:{rel_type}]->(t)
+        WHERE (s.id = $source_id OR s.name = $source_id)
+          AND (t.id = $target_id OR t.name = $target_id)
+        RETURN r
+        LIMIT 1
+        """
+        check_results = neo4j_client.execute_query(check_query, {
+            "source_id": source_id,
+            "target_id": target_id
+        })
+        
+        if not check_results:
+            raise HTTPException(status_code=404, detail="Relationship not found")
+        
+        # Delete relationship
+        delete_query = f"""
+        MATCH (s)-[r:{rel_type}]->(t)
+        WHERE (s.id = $source_id OR s.name = $source_id)
+          AND (t.id = $target_id OR t.name = $target_id)
+        DELETE r
+        """
+        
+        neo4j_client.execute_query(delete_query, {
+            "source_id": source_id,
+            "target_id": target_id
+        })
+        
+        return None
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete relationship: {str(e)}")
