@@ -1,4 +1,5 @@
 """Document ingestion routes."""
+import json
 import uuid
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import Dict, Optional
@@ -92,15 +93,26 @@ async def ingest_document(document_id: str, background_tasks: BackgroundTasks):
     """
     # Get document info
     result = neo4j_client.execute_query(
-        "MATCH (d:Document {id: $doc_id}) RETURN d",
+        "MATCH (d:Document {id: $doc_id}) RETURN d.filename as filename, d.kind as kind, d.meta as meta",
         {"doc_id": document_id}
     )
     
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    doc_data = result[0]["d"]
-    file_path = doc_data.get("meta", {}).get("path") or storage.get_file_path(doc_data["filename"])
+    doc_data = result[0]
+    filename = doc_data["filename"]
+    kind = doc_data["kind"]
+    
+    # Parse meta JSON string if it exists
+    meta = {}
+    if doc_data.get("meta"):
+        try:
+            meta = json.loads(doc_data["meta"]) if isinstance(doc_data["meta"], str) else doc_data["meta"]
+        except (json.JSONDecodeError, TypeError):
+            meta = {}
+    
+    file_path = meta.get("path") or storage.get_file_path(filename)
     
     if not Path(file_path).exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
@@ -115,7 +127,7 @@ async def ingest_document(document_id: str, background_tasks: BackgroundTasks):
     }
     
     # Start background processing
-    background_tasks.add_task(process_document, document_id, str(file_path), doc_data["kind"], job_id)
+    background_tasks.add_task(process_document, document_id, str(file_path), kind, job_id)
     
     return {
         "jobId": job_id,
