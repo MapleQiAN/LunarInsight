@@ -1,4 +1,5 @@
 """Neo4j client for graph operations."""
+import json
 from typing import List, Dict, Any, Optional
 from neo4j import GraphDatabase, Driver
 from infra.config import settings
@@ -82,6 +83,9 @@ class Neo4jClient:
                        kind: str, size: int, mime: Optional[str] = None,
                        source_id: Optional[str] = None, meta: Optional[Dict] = None) -> bool:
         """Create or update a Document node."""
+        # Serialize meta dict to JSON string for Neo4j storage
+        # Neo4j only supports primitive types, so we serialize dicts to JSON strings
+        meta_json = json.dumps(meta) if meta and len(meta) > 0 else None
         query = """
         MERGE (d:Document {id: $doc_id})
         SET d.filename = $filename,
@@ -90,7 +94,7 @@ class Neo4jClient:
             d.size = $size,
             d.mime = $mime,
             d.source_id = $source_id,
-            d.meta = $meta,
+            d.meta = $meta_json,
             d.created_at = coalesce(d.created_at, datetime()),
             d.updated_at = datetime()
         RETURN d
@@ -103,18 +107,21 @@ class Neo4jClient:
             "size": size,
             "mime": mime,
             "source_id": source_id,
-            "meta": meta or {}
+            "meta_json": meta_json
         })
         return len(result) > 0
     
     def create_concept(self, name: str, domain: Optional[str] = None, 
                       meta: Optional[Dict] = None) -> bool:
         """Create or merge a Concept node."""
+        # Serialize meta dict to JSON string for Neo4j storage
+        # Neo4j only supports primitive types, so we serialize dicts to JSON strings
+        meta_json = json.dumps(meta) if meta and len(meta) > 0 else None
         query = """
         MERGE (c:Concept {name: $name})
         ON CREATE SET 
             c.domain = $domain,
-            c.meta = $meta,
+            c.meta = $meta_json,
             c.aliases = [],
             c.created_at = datetime(),
             c.updated_at = datetime()
@@ -125,7 +132,7 @@ class Neo4jClient:
         result = self.execute_query(query, {
             "name": name,
             "domain": domain,
-            "meta": meta or {}
+            "meta_json": meta_json
         })
         return len(result) > 0
     
