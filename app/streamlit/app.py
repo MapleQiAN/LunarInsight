@@ -13,7 +13,7 @@ from pathlib import Path
 API_BASE = os.getenv("API_BASE", "http://localhost:8000")  # Default for local dev
 
 st.set_page_config(
-    page_title="LunarInsight | 月悟",
+    page_title="月悟·镜 | LunarInsight",
     page_icon="🌙",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -37,12 +37,14 @@ def load_css():
 
 load_css()
 
-# Header with Chinese styling
+# Header with professional styling
 st.markdown("""
-<div style="text-align: center; padding: 2rem 0;">
-    <h1 style="font-size: 3rem; margin-bottom: 0.5rem;">🌙 LunarInsight | 月悟</h1>
-    <p style="font-size: 1.2rem; color: #6B4423; font-style: italic; margin-top: 0;">
-        静心知识图谱引擎 · A quiet knowledge graph engine for insight
+<div style="text-align: center; padding: 2.5rem 0 2rem 0;">
+    <h1 style="font-size: 3.5rem; margin-bottom: 0.75rem; font-weight: 700; letter-spacing: -0.02em;">
+        月悟·镜
+    </h1>
+    <p style="font-size: 1.125rem; color: #64748b; font-weight: 400; margin-top: 0.5rem; letter-spacing: 0.05em;">
+        LunarInsight · 智能知识图谱分析平台
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -75,26 +77,26 @@ def upload_file(uploaded_file) -> Dict[str, Any]:
 
 
 def visualize_graph(nodes: List[Dict], edges: List[Dict]):
-    """Visualize graph using pyvis with Chinese style colors."""
-    # Chinese style background - warm beige/cream
+    """Visualize graph using pyvis with professional color scheme."""
+    # Professional background - light gray
     net = Network(
         height="700px", 
         width="100%", 
-        bgcolor="#F5F1E8", 
-        font_color="#3D2817",
+        bgcolor="#f8fafc", 
+        font_color="#1e293b",
         font_size=14
     )
     net.barnes_hut()
     
-    # Chinese color palette
+    # Professional color palette
     colors = {
-        "Concept": "#C9A961",      # Gold - concepts
-        "Document": "#8B4513",     # Saddle brown - documents
-        "Entity": "#D4AF37",       # Golden yellow - entities
-        "default": "#B8945F"       # Muted gold - default
+        "Concept": "#0ea5e9",      # Cyan - concepts
+        "Document": "#2d3748",     # Dark gray - documents
+        "Entity": "#d4af37",       # Gold - entities
+        "default": "#64748b"       # Slate gray - default
     }
     
-    # Add nodes with Chinese style colors
+    # Add nodes with professional colors
     for node in nodes:
         node_id = node.get("id", "")
         labels = node.get("labels", [])
@@ -103,34 +105,34 @@ def visualize_graph(nodes: List[Dict], edges: List[Dict]):
         
         # Determine color based on labels
         color = colors["default"]
-        border_color = "#6B4423"
+        border_color = "#475569"
         
         if "Concept" in labels:
             color = colors["Concept"]
-            border_color = "#8B6914"
+            border_color = "#0284c7"
         elif "Document" in labels:
             color = colors["Document"]
-            border_color = "#654321"
+            border_color = "#1a2332"
         elif "Entity" in labels:
             color = colors["Entity"]
-            border_color = "#B8860B"
+            border_color = "#b8945f"
         
         net.add_node(
             node_id,
             label=label[:25],  # Truncate long labels
             color=color,
             border=border_color,
-            font={"size": 14, "face": "Noto Serif SC, serif"},
+            font={"size": 14, "face": "Inter, Noto Serif SC, sans-serif"},
             title=json.dumps(props, indent=2, ensure_ascii=False)
         )
     
-    # Add edges with Chinese style
+    # Add edges with professional style
     for edge in edges:
         net.add_edge(
             edge.get("source"),
             edge.get("target"),
             label=edge.get("type", ""),
-            color="#8B4513",
+            color="#94a3b8",
             width=2,
             title=json.dumps(edge.get("properties", {}), indent=2, ensure_ascii=False)
         )
@@ -143,7 +145,7 @@ def visualize_graph(nodes: List[Dict], edges: List[Dict]):
         "shadow": true,
         "font": {
           "size": 14,
-          "face": "Noto Serif SC, serif"
+          "face": "Inter, Noto Serif SC, sans-serif"
         }
       },
       "edges": {
@@ -154,7 +156,7 @@ def visualize_graph(nodes: List[Dict], edges: List[Dict]):
         "shadow": true,
         "font": {
           "size": 12,
-          "face": "Noto Serif SC, serif"
+          "face": "Inter, Noto Serif SC, sans-serif"
         }
       },
       "physics": {
@@ -178,26 +180,184 @@ def visualize_graph(nodes: List[Dict], edges: List[Dict]):
     return net.generate_html()
 
 
-# Sidebar with Chinese styling
+# Sidebar with professional styling
 st.sidebar.markdown("""
-<div style="text-align: center; padding: 1rem 0; border-bottom: 2px solid #C9A961;">
-    <h2 style="color: #F5E6D3; margin: 0;">导航 | Navigation</h2>
+<div style="text-align: center; padding: 1.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+    <h2 style="color: #ffffff; margin: 0; font-size: 1.125rem; font-weight: 600; letter-spacing: 0.05em;">
+        导航 | Navigation
+    </h2>
 </div>
 """, unsafe_allow_html=True)
 
 page = st.sidebar.selectbox(
     "选择页面 | Choose a page",
-    ["Upload", "Graph Visualization", "Query", "Status"],
+    ["Dashboard", "Upload", "Graph Visualization", "Query", "Status"],
     format_func=lambda x: {
+        "Dashboard": "📊 仪表板",
         "Upload": "📤 上传文档",
         "Graph Visualization": "🕸️ 图谱可视化",
         "Query": "🔍 图谱查询",
-        "Status": "📊 处理状态"
+        "Status": "📈 处理状态"
     }.get(x, x)
 )
 
 # Main content
-if page == "Upload":
+if page == "Dashboard":
+    st.markdown("### 📊 系统概览 | System Overview")
+    st.markdown("---")
+    
+    # Fetch system statistics
+    with st.spinner("正在加载系统数据... | Loading system data..."):
+        # Get graph statistics with reasonable limits for dashboard
+        nodes_result = make_request("GET", "/graph/nodes?limit=1000")
+        edges_result = make_request("GET", "/graph/edges?limit=1000")
+        
+        # Calculate statistics
+        total_nodes = 0
+        total_edges = 0
+        concepts_count = 0
+        documents_count = 0
+        entities_count = 0
+        
+        if nodes_result and isinstance(nodes_result, list):
+            total_nodes = len(nodes_result)
+            concepts_count = len([n for n in nodes_result if "Concept" in n.get("labels", [])])
+            documents_count = len([n for n in nodes_result if "Document" in n.get("labels", [])])
+            entities_count = len([n for n in nodes_result if "Entity" in n.get("labels", [])])
+        
+        if edges_result and isinstance(edges_result, list):
+            total_edges = len(edges_result)
+    
+    # Key Metrics Row
+    st.markdown("#### 核心指标 | Key Metrics")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown("""
+        <div class="dashboard-card" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-left: 4px solid #3b82f6;">
+            <div style="font-size: 0.875rem; color: #1e40af; font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                总节点数
+            </div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #1e40af; margin: 0.5rem 0;">
+                {total_nodes:,}
+            </div>
+            <div style="font-size: 0.75rem; color: #64748b;">
+                Total Nodes
+            </div>
+        </div>
+        """.format(total_nodes=total_nodes), unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <div class="dashboard-card" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-left: 4px solid #10b981;">
+            <div style="font-size: 0.875rem; color: #166534; font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                总关系数
+            </div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #166534; margin: 0.5rem 0;">
+                {total_edges:,}
+            </div>
+            <div style="font-size: 0.75rem; color: #64748b;">
+                Total Relationships
+            </div>
+        </div>
+        """.format(total_edges=total_edges), unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown("""
+        <div class="dashboard-card" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-left: 4px solid #d4af37;">
+            <div style="font-size: 0.875rem; color: #92400e; font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                概念数
+            </div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #92400e; margin: 0.5rem 0;">
+                {concepts:,}
+            </div>
+            <div style="font-size: 0.75rem; color: #64748b;">
+                Concepts
+            </div>
+        </div>
+        """.format(concepts=concepts_count), unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown("""
+        <div class="dashboard-card" style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border-left: 4px solid #ef4444;">
+            <div style="font-size: 0.875rem; color: #991b1b; font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                文档数
+            </div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: #991b1b; margin: 0.5rem 0;">
+                {documents:,}
+            </div>
+            <div style="font-size: 0.75rem; color: #64748b;">
+                Documents
+            </div>
+        </div>
+        """.format(documents=documents_count), unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Quick Actions and System Status
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("#### 🚀 快速操作 | Quick Actions")
+        action_col1, action_col2, action_col3 = st.columns(3)
+        
+        with action_col1:
+            if st.button("📤 上传文档", use_container_width=True, key="quick_upload"):
+                st.session_state["page_redirect"] = "Upload"
+        
+        with action_col2:
+            if st.button("🕸️ 查看图谱", use_container_width=True, key="quick_graph"):
+                st.session_state["page_redirect"] = "Graph Visualization"
+        
+        with action_col3:
+            if st.button("🔍 执行查询", use_container_width=True, key="quick_query"):
+                st.session_state["page_redirect"] = "Query"
+    
+    with col2:
+        st.markdown("#### ⚡ 系统状态 | System Status")
+        st.markdown("""
+        <div style="background: #ffffff; border-radius: 10px; padding: 1.25rem; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+            <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+                <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 0.75rem;"></div>
+                <span style="font-weight: 600; color: #1e293b;">API 服务</span>
+            </div>
+            <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+                <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 0.75rem;"></div>
+                <span style="font-weight: 600; color: #1e293b;">图谱数据库</span>
+            </div>
+            <div style="display: flex; align-items: center;">
+                <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 0.75rem;"></div>
+                <span style="font-weight: 600; color: #1e293b;">处理引擎</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Node Type Distribution
+    st.markdown("#### 📊 节点类型分布 | Node Type Distribution")
+    if total_nodes > 0:
+        distribution_data = {
+            "类型 | Type": ["概念 | Concept", "文档 | Document", "实体 | Entity", "其他 | Other"],
+            "数量 | Count": [
+                concepts_count,
+                documents_count,
+                entities_count,
+                total_nodes - concepts_count - documents_count - entities_count
+            ]
+        }
+        df_dist = pd.DataFrame(distribution_data)
+        st.bar_chart(df_dist.set_index("类型 | Type"))
+    else:
+        st.info("ℹ️ 暂无数据，请先上传文档进行处理 | No data available. Please upload documents first.")
+    
+    # Handle page redirect
+    if st.session_state.get("page_redirect"):
+        page = st.session_state.pop("page_redirect")
+        st.session_state["page_redirect"] = None
+        st.rerun()
+
+elif page == "Upload":
     st.markdown("### 📤 上传文档 | Upload Document")
     st.markdown("---")
     
