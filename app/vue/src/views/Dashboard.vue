@@ -482,7 +482,7 @@ const loadStats = async () => {
     // Update system status based on data
     systemStatus.value.neo4j = data.totalDocuments >= 0 // If we got data, Neo4j is running
     
-    message.success('数据加载成功')
+    // message.success('数据加载成功')
   } catch (error) {
     message.error('加载统计数据失败')
     console.error('Failed to load stats:', error)
