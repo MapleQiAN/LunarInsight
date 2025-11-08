@@ -15,35 +15,43 @@ class ConfigService:
         
         Returns:
             Dictionary with runtime configuration values.
-            Falls back to base_settings if not found in database.
+            Falls back to base_settings if not found in database or Neo4j not initialized.
         """
-        query = """
-        MATCH (config:RuntimeConfig {id: $config_id})
-        RETURN config
-        """
-        result = neo4j_client.execute_query(query, {"config_id": self.CONFIG_NODE_ID})
+        # 如果 Neo4j 未初始化，直接返回环境变量配置
+        if not neo4j_client._initialized:
+            return self._get_env_config()
         
-        if result and result[0].get("config"):
-            config_node = result[0]["config"]
-            return {
-                "ai_provider": config_node.get("ai_provider", base_settings.ai_provider),
-                "ai_api_key": config_node.get("ai_api_key"),
-                "ai_model": config_node.get("ai_model"),
-                "ai_base_url": config_node.get("ai_base_url"),
-                # 兼容性字段
-                "openai_api_key": config_node.get("openai_api_key"),
-                "openai_model": config_node.get("openai_model", base_settings.openai_model),
-                "openai_base_url": config_node.get("openai_base_url"),
-                "ollama_base_url": config_node.get("ollama_base_url", base_settings.ollama_base_url),
-                "ollama_model": config_node.get("ollama_model", base_settings.ollama_model),
-            }
-        else:
-            # 首次运行，从环境变量初始化
-            return self._initialize_from_env()
+        try:
+            query = """
+            MATCH (config:RuntimeConfig {id: $config_id})
+            RETURN config
+            """
+            result = neo4j_client.execute_query(query, {"config_id": self.CONFIG_NODE_ID})
+            
+            if result and result[0].get("config"):
+                config_node = result[0]["config"]
+                return {
+                    "ai_provider": config_node.get("ai_provider", base_settings.ai_provider),
+                    "ai_api_key": config_node.get("ai_api_key"),
+                    "ai_model": config_node.get("ai_model"),
+                    "ai_base_url": config_node.get("ai_base_url"),
+                    # 兼容性字段
+                    "openai_api_key": config_node.get("openai_api_key"),
+                    "openai_model": config_node.get("openai_model", base_settings.openai_model),
+                    "openai_base_url": config_node.get("openai_base_url"),
+                    "ollama_base_url": config_node.get("ollama_base_url", base_settings.ollama_base_url),
+                    "ollama_model": config_node.get("ollama_model", base_settings.ollama_model),
+                }
+            else:
+                # 首次运行，从环境变量初始化
+                return self._initialize_from_env()
+        except RuntimeError:
+            # Neo4j 未初始化，返回环境变量配置
+            return self._get_env_config()
     
-    def _initialize_from_env(self) -> Dict[str, Any]:
-        """Initialize runtime config from environment variables."""
-        config = {
+    def _get_env_config(self) -> Dict[str, Any]:
+        """Get configuration from environment variables (without saving to DB)."""
+        return {
             "ai_provider": base_settings.ai_provider,
             "ai_api_key": base_settings.ai_api_key,
             "ai_model": base_settings.ai_model,
@@ -54,9 +62,14 @@ class ConfigService:
             "ollama_base_url": base_settings.ollama_base_url,
             "ollama_model": base_settings.ollama_model,
         }
+    
+    def _initialize_from_env(self) -> Dict[str, Any]:
+        """Initialize runtime config from environment variables."""
+        config = self._get_env_config()
         
-        # 保存到数据库
-        self.update_runtime_config(config)
+        # 保存到数据库（仅在 Neo4j 已初始化时）
+        if neo4j_client._initialized:
+            self.update_runtime_config(config)
         return config
     
     def update_runtime_config(self, config: Dict[str, Any]) -> bool:
@@ -69,24 +82,32 @@ class ConfigService:
         Returns:
             True if successful, False otherwise.
         """
+        # 如果 Neo4j 未初始化，跳过保存
+        if not neo4j_client._initialized:
+            return False
+        
         # 过滤掉 None 值和 "***" 占位符
         filtered_config = {
             k: v for k, v in config.items() 
             if v is not None and v != "***"
         }
         
-        query = """
-        MERGE (config:RuntimeConfig {id: $config_id})
-        SET config += $properties,
-            config.updated_at = datetime()
-        RETURN config
-        """
-        result = neo4j_client.execute_query(query, {
-            "config_id": self.CONFIG_NODE_ID,
-            "properties": filtered_config
-        })
-        
-        return len(result) > 0
+        try:
+            query = """
+            MERGE (config:RuntimeConfig {id: $config_id})
+            SET config += $properties,
+                config.updated_at = datetime()
+            RETURN config
+            """
+            result = neo4j_client.execute_query(query, {
+                "config_id": self.CONFIG_NODE_ID,
+                "properties": filtered_config
+            })
+            
+            return len(result) > 0
+        except RuntimeError:
+            # Neo4j 未初始化，返回 False
+            return False
     
     def get_ai_provider_config(self) -> Dict[str, Any]:
         """
