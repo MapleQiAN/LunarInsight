@@ -9,8 +9,14 @@ class Neo4jClient:
     
     def __init__(self):
         self.driver: Optional[Driver] = None
-        self._connect()
-        self._initialize_schema()
+        self._initialized = False
+    
+    def initialize(self):
+        """Initialize connection and schema (call this explicitly)."""
+        if not self._initialized:
+            self._connect()
+            self._initialize_schema()
+            self._initialized = True
     
     def _connect(self):
         """Establish connection to Neo4j."""
@@ -65,6 +71,9 @@ class Neo4jClient:
         Returns:
             List of result records as dictionaries
         """
+        if not self._initialized:
+            raise RuntimeError("Neo4jClient is not initialized. Call initialize() first.")
+        
         with self.driver.session() as session:
             result = session.run(query, parameters or {})
             return [dict(record) for record in result]
