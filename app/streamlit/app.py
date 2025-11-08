@@ -8,12 +8,16 @@ from pyvis.network import Network
 import pandas as pd
 import os
 from pathlib import Path
+from i18n.translations import get_translations, get_language, set_language, SUPPORTED_LANGUAGES, t
 
 # Configuration
 API_BASE = os.getenv("API_BASE", "http://localhost:8000")  # Default for local dev
 
+# Initialize translations
+translations = get_translations()
+
 st.set_page_config(
-    page_title="月悟·镜 | LunarInsight",
+    page_title=t("app.page_title"),
     page_icon="🌙",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -38,16 +42,22 @@ def load_css():
 load_css()
 
 # Header with professional styling
-st.markdown("""
-<div style="text-align: center; padding: 2.5rem 0 2rem 0;">
-    <h1 style="font-size: 3.5rem; margin-bottom: 0.75rem; font-weight: 700; letter-spacing: -0.02em;">
-        月悟·镜
-    </h1>
-    <p style="font-size: 1.125rem; color: #64748b; font-weight: 400; margin-top: 0.5rem; letter-spacing: 0.05em;">
-        LunarInsight · 智能知识图谱分析平台
-    </p>
-</div>
-""", unsafe_allow_html=True)
+def render_header():
+    """Render header with translations."""
+    title = t("app.title")
+    subtitle = t("app.subtitle")
+    st.markdown(f"""
+    <div style="text-align: center; padding: 2.5rem 0 2rem 0;">
+        <h1 style="font-size: 3.5rem; margin-bottom: 0.75rem; font-weight: 700; letter-spacing: -0.02em;">
+            {title}
+        </h1>
+        <p style="font-size: 1.125rem; color: #64748b; font-weight: 400; margin-top: 0.5rem; letter-spacing: 0.05em;">
+            {subtitle}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+render_header()
 
 
 def make_request(method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
@@ -181,33 +191,47 @@ def visualize_graph(nodes: List[Dict], edges: List[Dict]):
 
 
 # Sidebar with professional styling
-st.sidebar.markdown("""
+st.sidebar.markdown(f"""
 <div style="text-align: center; padding: 1.25rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
     <h2 style="color: #ffffff; margin: 0; font-size: 1.125rem; font-weight: 600; letter-spacing: 0.05em;">
-        导航 | Navigation
+        {t("navigation.title")}
     </h2>
 </div>
 """, unsafe_allow_html=True)
 
+# Language selector
+st.sidebar.markdown("---")
+selected_lang = st.sidebar.selectbox(
+    f"🌐 {t('common.language')}",
+    options=list(SUPPORTED_LANGUAGES.keys()),
+    format_func=lambda x: f"{SUPPORTED_LANGUAGES[x]}",
+    index=list(SUPPORTED_LANGUAGES.keys()).index(get_language())
+)
+
+if selected_lang != get_language():
+    set_language(selected_lang)
+    translations = get_translations()
+    st.rerun()
+
 page = st.sidebar.selectbox(
-    "选择页面 | Choose a page",
+    t("navigation.select_page"),
     ["Dashboard", "Upload", "Graph Visualization", "Query", "Status"],
     format_func=lambda x: {
-        "Dashboard": "📊 仪表板",
-        "Upload": "📤 上传文档",
-        "Graph Visualization": "🕸️ 图谱可视化",
-        "Query": "🔍 图谱查询",
-        "Status": "📈 处理状态"
+        "Dashboard": t("navigation.dashboard"),
+        "Upload": t("navigation.upload"),
+        "Graph Visualization": t("navigation.graph_visualization"),
+        "Query": t("navigation.query"),
+        "Status": t("navigation.status")
     }.get(x, x)
 )
 
 # Main content
 if page == "Dashboard":
-    st.markdown("### 📊 系统概览 | System Overview")
+    st.markdown(f"### 📊 {t('dashboard.title')}")
     st.markdown("---")
     
     # Fetch system statistics
-    with st.spinner("正在加载系统数据... | Loading system data..."):
+    with st.spinner(t("dashboard.loading_data")):
         # Get graph statistics with reasonable limits for dashboard
         nodes_result = make_request("GET", "/graph/nodes?limit=1000")
         edges_result = make_request("GET", "/graph/edges?limit=1000")
@@ -229,68 +253,68 @@ if page == "Dashboard":
             total_edges = len(edges_result)
     
     # Key Metrics Row
-    st.markdown("#### 核心指标 | Key Metrics")
+    st.markdown(f"#### {t('dashboard.key_metrics')}")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.markdown("""
+        st.markdown(f"""
         <div class="dashboard-card" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-left: 4px solid #3b82f6;">
             <div style="font-size: 0.875rem; color: #1e40af; font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">
-                总节点数
+                {t('dashboard.total_nodes')}
             </div>
             <div style="font-size: 2.5rem; font-weight: 700; color: #1e40af; margin: 0.5rem 0;">
                 {total_nodes:,}
             </div>
             <div style="font-size: 0.75rem; color: #64748b;">
-                Total Nodes
+                {t('dashboard.total_nodes_en')}
             </div>
         </div>
-        """.format(total_nodes=total_nodes), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     with col2:
-        st.markdown("""
+        st.markdown(f"""
         <div class="dashboard-card" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-left: 4px solid #10b981;">
             <div style="font-size: 0.875rem; color: #166534; font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">
-                总关系数
+                {t('dashboard.total_edges')}
             </div>
             <div style="font-size: 2.5rem; font-weight: 700; color: #166534; margin: 0.5rem 0;">
                 {total_edges:,}
             </div>
             <div style="font-size: 0.75rem; color: #64748b;">
-                Total Relationships
+                {t('dashboard.total_edges_en')}
             </div>
         </div>
-        """.format(total_edges=total_edges), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     with col3:
-        st.markdown("""
+        st.markdown(f"""
         <div class="dashboard-card" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-left: 4px solid #d4af37;">
             <div style="font-size: 0.875rem; color: #92400e; font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">
-                概念数
+                {t('dashboard.concepts')}
             </div>
             <div style="font-size: 2.5rem; font-weight: 700; color: #92400e; margin: 0.5rem 0;">
-                {concepts:,}
+                {concepts_count:,}
             </div>
             <div style="font-size: 0.75rem; color: #64748b;">
-                Concepts
+                {t('dashboard.concepts_en')}
             </div>
         </div>
-        """.format(concepts=concepts_count), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     with col4:
-        st.markdown("""
+        st.markdown(f"""
         <div class="dashboard-card" style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border-left: 4px solid #ef4444;">
             <div style="font-size: 0.875rem; color: #991b1b; font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">
-                文档数
+                {t('dashboard.documents')}
             </div>
             <div style="font-size: 2.5rem; font-weight: 700; color: #991b1b; margin: 0.5rem 0;">
-                {documents:,}
+                {documents_count:,}
             </div>
             <div style="font-size: 0.75rem; color: #64748b;">
-                Documents
+                {t('dashboard.documents_en')}
             </div>
         </div>
-        """.format(documents=documents_count), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -298,36 +322,36 @@ if page == "Dashboard":
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.markdown("#### 🚀 快速操作 | Quick Actions")
+        st.markdown(f"#### 🚀 {t('dashboard.quick_actions')}")
         action_col1, action_col2, action_col3 = st.columns(3)
         
         with action_col1:
-            if st.button("📤 上传文档", use_container_width=True, key="quick_upload"):
+            if st.button(f"📤 {t('dashboard.upload_document')}", use_container_width=True, key="quick_upload"):
                 st.session_state["page_redirect"] = "Upload"
         
         with action_col2:
-            if st.button("🕸️ 查看图谱", use_container_width=True, key="quick_graph"):
+            if st.button(f"🕸️ {t('dashboard.view_graph')}", use_container_width=True, key="quick_graph"):
                 st.session_state["page_redirect"] = "Graph Visualization"
         
         with action_col3:
-            if st.button("🔍 执行查询", use_container_width=True, key="quick_query"):
+            if st.button(f"🔍 {t('dashboard.execute_query')}", use_container_width=True, key="quick_query"):
                 st.session_state["page_redirect"] = "Query"
     
     with col2:
-        st.markdown("#### ⚡ 系统状态 | System Status")
-        st.markdown("""
+        st.markdown(f"#### ⚡ {t('dashboard.system_status')}")
+        st.markdown(f"""
         <div style="background: #ffffff; border-radius: 10px; padding: 1.25rem; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
             <div style="display: flex; align-items: center; margin-bottom: 1rem;">
                 <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 0.75rem;"></div>
-                <span style="font-weight: 600; color: #1e293b;">API 服务</span>
+                <span style="font-weight: 600; color: #1e293b;">{t('dashboard.api_service')}</span>
             </div>
             <div style="display: flex; align-items: center; margin-bottom: 1rem;">
                 <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 0.75rem;"></div>
-                <span style="font-weight: 600; color: #1e293b;">图谱数据库</span>
+                <span style="font-weight: 600; color: #1e293b;">{t('dashboard.graph_database')}</span>
             </div>
             <div style="display: flex; align-items: center;">
                 <div style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; margin-right: 0.75rem;"></div>
-                <span style="font-weight: 600; color: #1e293b;">处理引擎</span>
+                <span style="font-weight: 600; color: #1e293b;">{t('dashboard.processing_engine')}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -335,11 +359,18 @@ if page == "Dashboard":
     st.markdown("<br>", unsafe_allow_html=True)
     
     # Node Type Distribution
-    st.markdown("#### 📊 节点类型分布 | Node Type Distribution")
+    st.markdown(f"#### 📊 {t('dashboard.node_distribution')}")
     if total_nodes > 0:
+        type_label = t("dashboard.type")
+        count_label = t("dashboard.count")
         distribution_data = {
-            "类型 | Type": ["概念 | Concept", "文档 | Document", "实体 | Entity", "其他 | Other"],
-            "数量 | Count": [
+            type_label: [
+                t("dashboard.concept"),
+                t("dashboard.document"),
+                t("dashboard.entity"),
+                t("dashboard.other")
+            ],
+            count_label: [
                 concepts_count,
                 documents_count,
                 entities_count,
@@ -347,9 +378,9 @@ if page == "Dashboard":
             ]
         }
         df_dist = pd.DataFrame(distribution_data)
-        st.bar_chart(df_dist.set_index("类型 | Type"))
+        st.bar_chart(df_dist.set_index(type_label))
     else:
-        st.info("ℹ️ 暂无数据，请先上传文档进行处理 | No data available. Please upload documents first.")
+        st.info(f"ℹ️ {t('dashboard.no_data')}")
     
     # Handle page redirect
     if st.session_state.get("page_redirect"):
@@ -358,223 +389,223 @@ if page == "Dashboard":
         st.rerun()
 
 elif page == "Upload":
-    st.markdown("### 📤 上传文档 | Upload Document")
+    st.markdown(f"### 📤 {t('upload.title')}")
     st.markdown("---")
     
     uploaded_file = st.file_uploader(
-        "选择文件 | Choose a file",
+        t("upload.choose_file"),
         type=["pdf", "md", "markdown"],
-        help="支持格式: PDF, Markdown | Supported formats: PDF, Markdown"
+        help=t("upload.supported_formats")
     )
     
     if uploaded_file is not None:
         col1, col2 = st.columns([2, 1])
         with col1:
-            st.info(f"📄 **文件**: {uploaded_file.name} | **大小**: {uploaded_file.size:,} 字节")
+            st.info(f"📄 **{t('upload.file')}**: {uploaded_file.name} | **{t('upload.size')}**: {uploaded_file.size:,} {t('upload.bytes')}")
         
-        if st.button("📤 上传并处理 | Upload & Process", use_container_width=True):
-            with st.spinner("正在上传文件... | Uploading file..."):
+        if st.button(f"📤 {t('upload.upload_process')}", use_container_width=True):
+            with st.spinner(t("upload.uploading")):
                 try:
                     result = upload_file(uploaded_file)
-                    st.success("✅ 文件上传成功！| File uploaded successfully!")
+                    st.success(f"✅ {t('upload.upload_success')}")
                     
-                    with st.expander("查看上传结果 | View Upload Result", expanded=False):
+                    with st.expander(t("upload.view_result"), expanded=False):
                         st.json(result)
                     
                     doc_id = result.get("documentId")
                     if doc_id:
-                        st.info(f"📋 **文档 ID**: `{doc_id}`")
+                        st.info(f"📋 **{t('upload.document_id')}**: `{doc_id}`")
                         
                         # Trigger ingestion
-                        if st.button("🚀 开始处理 | Start Ingestion", use_container_width=True):
-                            with st.spinner("正在启动处理流程... | Starting ingestion..."):
+                        if st.button(f"🚀 {t('upload.start_ingestion')}", use_container_width=True):
+                            with st.spinner(t("upload.starting")):
                                 ingest_result = make_request(
                                     "POST",
                                     f"/ingest/{doc_id}"
                                 )
                                 if ingest_result:
-                                    st.success("✅ 处理已启动！| Ingestion started!")
+                                    st.success(f"✅ {t('upload.ingestion_started')}")
                                     
-                                    with st.expander("查看处理结果 | View Ingestion Result", expanded=False):
+                                    with st.expander(t("upload.view_ingestion_result"), expanded=False):
                                         st.json(ingest_result)
                                     
                                     st.session_state["job_id"] = ingest_result.get("jobId")
                                     st.session_state["doc_id"] = doc_id
                                     
                                     if st.session_state.get("job_id"):
-                                        st.info(f"💼 **任务 ID**: `{st.session_state['job_id']}` - 可在状态页面查看进度")
+                                        st.info(f"💼 **{t('upload.job_id')}**: `{st.session_state['job_id']}` - {t('upload.check_status')}")
                 except Exception as e:
-                    st.error(f"❌ 错误: {e} | Error: {e}")
+                    st.error(f"❌ {t('upload.error')}: {e}")
 
 elif page == "Graph Visualization":
-    st.markdown("### 🕸️ 知识图谱可视化 | Knowledge Graph Visualization")
+    st.markdown(f"### 🕸️ {t('graph.title')}")
     st.markdown("---")
     
     col1, col2 = st.columns([3, 1])
     with col1:
-        limit = st.number_input("节点数量限制 | Node Limit", min_value=10, max_value=500, value=100, step=10)
+        limit = st.number_input(t("graph.node_limit"), min_value=10, max_value=500, value=100, step=10)
     with col2:
         st.write("")  # Spacing
-        load_button = st.button("🔄 加载图谱 | Load Graph", use_container_width=True)
+        load_button = st.button(f"🔄 {t('graph.load_graph')}", use_container_width=True)
     
     if load_button:
-        with st.spinner("正在加载图谱数据... | Loading graph..."):
+        with st.spinner(t("graph.loading")):
             result = make_request("GET", f"/graph/query?limit={limit}")
             
             if result and "nodes" in result:
                 nodes = result.get("nodes", [])
                 edges = result.get("edges", [])
                 
-                st.success(f"✅ 已加载 {len(nodes)} 个节点和 {len(edges)} 个关系 | Loaded {len(nodes)} nodes and {len(edges)} relationships")
+                st.success(t("graph.loaded", nodes=len(nodes), edges=len(edges)))
                 
-                # Display stats with Chinese labels
+                # Display stats
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("节点数 | Nodes", len(nodes))
+                    st.metric(t("graph.nodes"), len(nodes))
                 with col2:
-                    st.metric("关系数 | Edges", len(edges))
+                    st.metric(t("graph.edges"), len(edges))
                 with col3:
                     concepts = [n for n in nodes if "Concept" in n.get("labels", [])]
-                    st.metric("概念数 | Concepts", len(concepts))
+                    st.metric(t("graph.concepts"), len(concepts))
                 with col4:
                     documents = [n for n in nodes if "Document" in n.get("labels", [])]
-                    st.metric("文档数 | Documents", len(documents))
+                    st.metric(t("graph.documents"), len(documents))
                 
                 # Visualize
                 if nodes:
-                    st.markdown("### 📊 图谱视图 | Graph View")
+                    st.markdown(f"### 📊 {t('graph.graph_view')}")
                     html = visualize_graph(nodes, edges)
                     st.components.v1.html(html, height=700)
                 else:
-                    st.info("ℹ️ 图谱中未找到节点 | No nodes found in the graph.")
+                    st.info(f"ℹ️ {t('graph.no_nodes')}")
             else:
-                st.warning("⚠️ API 未返回数据 | No data returned from API.")
+                st.warning(f"⚠️ {t('graph.no_data')}")
 
 elif page == "Query":
-    st.markdown("### 🔍 图谱查询 | Graph Query")
+    st.markdown(f"### 🔍 {t('query.title')}")
     st.markdown("---")
     
     query_type = st.selectbox(
-        "查询类型 | Query Type",
+        t("query.query_type"),
         ["Cypher Query", "Get Nodes", "Get Edges"],
         format_func=lambda x: {
-            "Cypher Query": "🔤 Cypher 查询",
-            "Get Nodes": "📦 获取节点",
-            "Get Edges": "🔗 获取关系"
+            "Cypher Query": f"🔤 {t('query.cypher_query')}",
+            "Get Nodes": f"📦 {t('query.get_nodes')}",
+            "Get Edges": f"🔗 {t('query.get_edges')}"
         }.get(x, x)
     )
     
     if query_type == "Cypher Query":
-        st.markdown("#### 🔤 Cypher 查询 | Cypher Query")
+        st.markdown(f"#### 🔤 {t('query.cypher_query')}")
         cypher = st.text_area(
-            "输入 Cypher 查询语句 | Enter Cypher Query",
+            t("query.enter_cypher"),
             value="MATCH (n) RETURN n LIMIT 10",
             height=120,
-            help="使用 Neo4j Cypher 语法查询图谱 | Use Neo4j Cypher syntax to query the graph"
+            help=t("query.cypher_help")
         )
         
-        if st.button("▶️ 执行查询 | Execute Query", use_container_width=True):
-            with st.spinner("正在执行查询... | Executing query..."):
+        if st.button(f"▶️ {t('query.execute')}", use_container_width=True):
+            with st.spinner(t("query.executing")):
                 import urllib.parse
                 encoded_cypher = urllib.parse.quote(cypher)
                 result = make_request("GET", f"/graph/query?cypher={encoded_cypher}&limit=100")
                 if result:
-                    st.success("✅ 查询成功！| Query executed successfully!")
+                    st.success(f"✅ {t('query.success')}")
                     
-                    with st.expander("查看查询结果 | View Query Result", expanded=True):
+                    with st.expander(t("query.view_result"), expanded=True):
                         st.json(result)
                 else:
-                    st.warning("⚠️ 查询未返回结果 | Query returned no results")
+                    st.warning(f"⚠️ {t('query.no_results')}")
     
     elif query_type == "Get Nodes":
-        st.markdown("#### 📦 获取节点 | Get Nodes")
+        st.markdown(f"#### 📦 {t('query.get_nodes')}")
         col1, col2 = st.columns(2)
         with col1:
-            label = st.text_input("标签 (可选) | Label (optional)", "", help="筛选特定标签的节点 | Filter nodes by label")
+            label = st.text_input(t("query.label_optional"), "", help=t("query.label_help"))
         with col2:
-            limit = st.number_input("数量限制 | Limit", min_value=1, max_value=1000, value=100, step=10)
+            limit = st.number_input(t("query.limit"), min_value=1, max_value=1000, value=100, step=10)
         
-        if st.button("📦 获取节点 | Get Nodes", use_container_width=True):
-            with st.spinner("正在获取节点... | Fetching nodes..."):
+        if st.button(f"📦 {t('query.get_nodes_btn')}", use_container_width=True):
+            with st.spinner(t("query.fetching_nodes")):
                 endpoint = f"/graph/nodes?limit={limit}"
                 if label:
                     endpoint += f"&label={label}"
                 result = make_request("GET", endpoint)
                 if result:
-                    st.success(f"✅ 找到 {len(result)} 个节点 | Found {len(result)} nodes")
+                    st.success(t("query.found_nodes", count=len(result)))
                     
                     # Display as table
                     if result:
                         df = pd.DataFrame([
                             {
                                 "ID": n.get("id"),
-                                "标签 | Labels": ", ".join(n.get("labels", [])),
-                                "属性 | Properties": json.dumps(n.get("properties", {}), ensure_ascii=False)
+                                t("query.labels"): ", ".join(n.get("labels", [])),
+                                t("query.properties"): json.dumps(n.get("properties", {}), ensure_ascii=False)
                             }
                             for n in result
                         ])
                         st.dataframe(df, use_container_width=True)
                     
-                    with st.expander("查看原始 JSON | View Raw JSON", expanded=False):
+                    with st.expander(t("query.view_raw_json"), expanded=False):
                         st.json(result)
                 else:
-                    st.warning("⚠️ 未找到节点 | No nodes found")
+                    st.warning(f"⚠️ {t('query.no_nodes_found')}")
     
     elif query_type == "Get Edges":
-        st.markdown("#### 🔗 获取关系 | Get Edges")
+        st.markdown(f"#### 🔗 {t('query.get_edges')}")
         col1, col2 = st.columns(2)
         with col1:
-            rel_type = st.text_input("关系类型 (可选) | Relationship Type (optional)", "", help="筛选特定类型的关系 | Filter edges by relationship type")
+            rel_type = st.text_input(t("query.rel_type_optional"), "", help=t("query.rel_type_help"))
         with col2:
-            limit = st.number_input("数量限制 | Limit", min_value=1, max_value=1000, value=100, step=10)
+            limit = st.number_input(t("query.limit"), min_value=1, max_value=1000, value=100, step=10)
         
-        if st.button("🔗 获取关系 | Get Edges", use_container_width=True):
-            with st.spinner("正在获取关系... | Fetching edges..."):
+        if st.button(f"🔗 {t('query.get_edges_btn')}", use_container_width=True):
+            with st.spinner(t("query.fetching_edges")):
                 endpoint = f"/graph/edges?limit={limit}"
                 if rel_type:
                     endpoint += f"&rel_type={rel_type}"
                 result = make_request("GET", endpoint)
                 if result:
-                    st.success(f"✅ 找到 {len(result)} 个关系 | Found {len(result)} edges")
+                    st.success(t("query.found_edges", count=len(result)))
                     
                     # Display as table
                     if result:
                         df = pd.DataFrame([
                             {
-                                "源节点 | Source": e.get("source"),
-                                "关系类型 | Type": e.get("type"),
-                                "目标节点 | Target": e.get("target"),
-                                "属性 | Properties": json.dumps(e.get("properties", {}), ensure_ascii=False)
+                                t("query.source"): e.get("source"),
+                                t("query.type"): e.get("type"),
+                                t("query.target"): e.get("target"),
+                                t("query.properties"): json.dumps(e.get("properties", {}), ensure_ascii=False)
                             }
                             for e in result
                         ])
                         st.dataframe(df, use_container_width=True)
                     
-                    with st.expander("查看原始 JSON | View Raw JSON", expanded=False):
+                    with st.expander(t("query.view_raw_json"), expanded=False):
                         st.json(result)
                 else:
-                    st.warning("⚠️ 未找到关系 | No edges found")
+                    st.warning(f"⚠️ {t('query.no_edges_found')}")
 
 elif page == "Status":
-    st.markdown("### 📊 处理状态 | Ingestion Status")
+    st.markdown(f"### 📊 {t('status.title')}")
     st.markdown("---")
     
     job_id = st.text_input(
-        "任务 ID | Job ID", 
+        t("status.job_id"), 
         value=st.session_state.get("job_id", ""),
-        help="输入要查询的任务 ID | Enter the job ID to check status"
+        help=t("status.job_id_help")
     )
     
     if job_id:
-        if st.button("🔄 检查状态 | Check Status", use_container_width=True):
-            with st.spinner("正在检查状态... | Checking status..."):
+        if st.button(f"🔄 {t('status.check_status')}", use_container_width=True):
+            with st.spinner(t("status.checking")):
                 result = make_request("GET", f"/ingest/status/{job_id}")
                 if result:
                     status = result.get("status", "unknown")
                     progress = result.get("progress", 0)
                     message = result.get("message", "")
                     
-                    # Status display with Chinese labels
+                    # Status display
                     col1, col2 = st.columns([1, 2])
                     with col1:
                         status_emoji = {
@@ -584,10 +615,10 @@ elif page == "Status":
                             "failed": "❌",
                             "unknown": "❓"
                         }.get(status.lower(), "❓")
-                        st.metric("状态 | Status", f"{status_emoji} {status}")
+                        st.metric(t("status.status"), f"{status_emoji} {status}")
                     
                     with col2:
-                        st.metric("进度 | Progress", f"{progress}%")
+                        st.metric(t("status.progress"), f"{progress}%")
                     
                     # Progress bar
                     st.progress(progress / 100 if progress > 0 else 0)
@@ -597,7 +628,7 @@ elif page == "Status":
                     
                     # Statistics section
                     if "stats" in result:
-                        st.markdown("#### 📈 统计信息 | Statistics")
+                        st.markdown(f"#### 📈 {t('status.statistics')}")
                         stats = result["stats"]
                         
                         if isinstance(stats, dict):
@@ -606,14 +637,14 @@ elif page == "Status":
                                 with stats_cols[idx % len(stats_cols)]:
                                     st.metric(key.replace("_", " ").title(), value)
                         
-                        with st.expander("查看详细统计 | View Detailed Statistics", expanded=False):
+                        with st.expander(t("status.view_statistics"), expanded=False):
                             st.json(stats)
                     
                     # Full result
-                    with st.expander("查看完整结果 | View Full Result", expanded=False):
+                    with st.expander(t("status.view_full_result"), expanded=False):
                         st.json(result)
                 else:
-                    st.error("❌ 无法获取状态信息 | Unable to fetch status information")
+                    st.error(f"❌ {t('status.fetch_error')}")
     else:
-        st.info("ℹ️ 请输入任务 ID 或从上传页面获取 | Please enter a job ID or get one from the upload page")
+        st.info(f"ℹ️ {t('status.enter_job_id')}")
 
