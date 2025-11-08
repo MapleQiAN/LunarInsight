@@ -1,8 +1,9 @@
 """Settings API routes."""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Literal
+from typing import Optional, Literal, List, Dict, Any
 from infra.config import settings
+from infra.ai_providers import AIProviderFactory
 import os
 import json
 
@@ -11,7 +12,16 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 class AISettings(BaseModel):
     """AI configuration settings."""
-    ai_provider: Literal["openai", "ollama", "mock"]
+    ai_provider: Literal[
+        "openai", "anthropic", "google", "deepseek", "qwen", 
+        "glm", "moonshot", "ernie", "minimax", "doubao", 
+        "ollama", "mock"
+    ]
+    # 通用配置
+    ai_api_key: Optional[str] = None
+    ai_model: Optional[str] = None
+    ai_base_url: Optional[str] = None
+    # 向后兼容的旧配置
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o-mini"
     openai_base_url: Optional[str] = None
@@ -28,7 +38,14 @@ class DatabaseSettings(BaseModel):
 
 class AllSettings(BaseModel):
     """All application settings."""
-    ai_provider: Literal["openai", "ollama", "mock"]
+    ai_provider: Literal[
+        "openai", "anthropic", "google", "deepseek", "qwen", 
+        "glm", "moonshot", "ernie", "minimax", "doubao", 
+        "ollama", "mock"
+    ]
+    ai_api_key: Optional[str] = None
+    ai_model: Optional[str] = None
+    ai_base_url: Optional[str] = None
     openai_api_key: Optional[str] = None
     openai_model: str
     openai_base_url: Optional[str] = None
@@ -80,7 +97,16 @@ def write_env_file(env_vars):
         f.write("# AI Provider Configuration\n")
         f.write(f"AI_PROVIDER={env_vars.get('AI_PROVIDER', 'mock')}\n\n")
         
-        f.write("# OpenAI Configuration\n")
+        f.write("# General AI Configuration (推荐使用)\n")
+        if env_vars.get('AI_API_KEY'):
+            f.write(f"AI_API_KEY={env_vars.get('AI_API_KEY')}\n")
+        if env_vars.get('AI_MODEL'):
+            f.write(f"AI_MODEL={env_vars.get('AI_MODEL')}\n")
+        if env_vars.get('AI_BASE_URL'):
+            f.write(f"AI_BASE_URL={env_vars.get('AI_BASE_URL')}\n")
+        f.write("\n")
+        
+        f.write("# OpenAI Configuration (兼容性配置)\n")
         if env_vars.get('OPENAI_API_KEY'):
             f.write(f"OPENAI_API_KEY={env_vars.get('OPENAI_API_KEY')}\n")
         f.write(f"OPENAI_MODEL={env_vars.get('OPENAI_MODEL', 'gpt-4o-mini')}\n")
@@ -88,7 +114,7 @@ def write_env_file(env_vars):
             f.write(f"OPENAI_BASE_URL={env_vars.get('OPENAI_BASE_URL')}\n")
         f.write("\n")
         
-        f.write("# Ollama Configuration\n")
+        f.write("# Ollama Configuration (兼容性配置)\n")
         f.write(f"OLLAMA_BASE_URL={env_vars.get('OLLAMA_BASE_URL', 'http://localhost:11434')}\n")
         f.write(f"OLLAMA_MODEL={env_vars.get('OLLAMA_MODEL', 'llama3')}\n\n")
         
@@ -100,6 +126,14 @@ def write_env_file(env_vars):
         f.write(f"API_PORT={env_vars.get('API_PORT', '8000')}\n")
 
 
+@router.get("/ai-providers")
+async def list_ai_providers():
+    """List all supported AI providers."""
+    return {
+        "providers": AIProviderFactory.list_providers()
+    }
+
+
 @router.get("/")
 async def get_settings():
     """Get current settings."""
@@ -108,6 +142,9 @@ async def get_settings():
     
     return {
         "ai_provider": env_vars.get("AI_PROVIDER", settings.ai_provider),
+        "ai_api_key": "***" if env_vars.get("AI_API_KEY") else None,
+        "ai_model": env_vars.get("AI_MODEL", settings.ai_model),
+        "ai_base_url": env_vars.get("AI_BASE_URL", settings.ai_base_url),
         "openai_api_key": "***" if env_vars.get("OPENAI_API_KEY") else None,
         "openai_model": env_vars.get("OPENAI_MODEL", settings.openai_model),
         "openai_base_url": env_vars.get("OPENAI_BASE_URL", settings.openai_base_url),
@@ -128,7 +165,16 @@ async def update_ai_settings(ai_settings: AISettings):
         # Update AI settings
         env_vars['AI_PROVIDER'] = ai_settings.ai_provider
         
-        if ai_settings.openai_api_key:
+        # 更新通用配置
+        if ai_settings.ai_api_key and ai_settings.ai_api_key != "***":
+            env_vars['AI_API_KEY'] = ai_settings.ai_api_key
+        if ai_settings.ai_model:
+            env_vars['AI_MODEL'] = ai_settings.ai_model
+        if ai_settings.ai_base_url:
+            env_vars['AI_BASE_URL'] = ai_settings.ai_base_url
+        
+        # 更新兼容性配置
+        if ai_settings.openai_api_key and ai_settings.openai_api_key != "***":
             env_vars['OPENAI_API_KEY'] = ai_settings.openai_api_key
         env_vars['OPENAI_MODEL'] = ai_settings.openai_model
         if ai_settings.openai_base_url:
@@ -151,62 +197,76 @@ async def update_ai_settings(ai_settings: AISettings):
 async def test_ai_connection(ai_settings: AISettings):
     """Test AI provider connection."""
     try:
-        if ai_settings.ai_provider == "openai":
-            if not ai_settings.openai_api_key:
-                return {
-                    "success": False,
-                    "message": "OpenAI API key is required"
-                }
-            
-            # Test OpenAI connection
-            from openai import OpenAI
-            client = OpenAI(
-                api_key=ai_settings.openai_api_key,
-                base_url=ai_settings.openai_base_url
-            )
-            
-            # Simple test call
-            response = client.chat.completions.create(
-                model=ai_settings.openai_model,
-                messages=[{"role": "user", "content": "Hello"}],
-                max_tokens=5
-            )
-            
+        if ai_settings.ai_provider == "mock":
             return {
                 "success": True,
-                "message": f"Successfully connected to OpenAI ({ai_settings.openai_model})"
-            }
-            
-        elif ai_settings.ai_provider == "ollama":
-            # Test Ollama connection
-            from openai import OpenAI
-            client = OpenAI(
-                base_url=f"{ai_settings.ollama_base_url}/v1",
-                api_key="ollama"
-            )
-            
-            # Simple test call
-            response = client.chat.completions.create(
-                model=ai_settings.ollama_model,
-                messages=[{"role": "user", "content": "Hello"}],
-                max_tokens=5
-            )
-            
-            return {
-                "success": True,
-                "message": f"Successfully connected to Ollama ({ai_settings.ollama_model})"
+                "message": "Mock 模式 - 无需连接测试"
             }
         
-        else:
+        # 使用 AIProviderFactory 创建客户端进行测试
+        try:
+            # 优先使用通用配置
+            api_key = ai_settings.ai_api_key
+            model = ai_settings.ai_model
+            base_url = ai_settings.ai_base_url
+            
+            # 向后兼容：如果使用旧的provider，尝试使用旧配置
+            if ai_settings.ai_provider == "openai" and not api_key:
+                api_key = ai_settings.openai_api_key
+                model = model or ai_settings.openai_model
+                base_url = base_url or ai_settings.openai_base_url
+            elif ai_settings.ai_provider == "ollama" and not base_url:
+                base_url = ai_settings.ollama_base_url
+                model = model or ai_settings.ollama_model
+            
+            # 过滤掉 "***" 占位符
+            if api_key == "***":
+                api_key = None
+            
+            client = AIProviderFactory.create_client(
+                provider=ai_settings.ai_provider,
+                api_key=api_key,
+                model=model,
+                base_url=base_url
+            )
+            
+            # 简单的测试调用
+            response = client.chat_completion(
+                messages=[{"role": "user", "content": "Hello"}],
+                temperature=0.3,
+                max_tokens=5
+            )
+            
+            provider_names = {
+                "openai": "OpenAI GPT",
+                "anthropic": "Anthropic Claude",
+                "google": "Google Gemini",
+                "deepseek": "DeepSeek",
+                "qwen": "阿里云通义千问",
+                "glm": "智谱AI (GLM)",
+                "moonshot": "月之暗面 Kimi",
+                "ernie": "百度文心一言",
+                "minimax": "MiniMax",
+                "doubao": "字节豆包",
+                "ollama": "Ollama"
+            }
+            provider_name = provider_names.get(ai_settings.ai_provider, ai_settings.ai_provider)
+            
             return {
                 "success": True,
-                "message": "Mock mode - no connection test needed"
+                "message": f"成功连接到 {provider_name} (模型: {client.model})"
+            }
+            
+        except ValueError as e:
+            return {
+                "success": False,
+                "message": f"配置错误: {str(e)}"
             }
             
     except Exception as e:
         return {
             "success": False,
-            "message": f"Connection failed: {str(e)}"
+            "message": f"连接失败: {str(e)}"
         }
 
 
