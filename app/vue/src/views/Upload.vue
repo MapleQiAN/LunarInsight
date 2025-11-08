@@ -66,6 +66,39 @@
                   </n-button>
                 </div>
 
+                <!-- AI 配置选项 -->
+                <div class="ai-config-section">
+                  <n-collapse>
+                    <n-collapse-item title="🤖 AI 智能分析（可选）" name="ai-config">
+                      <n-space vertical :size="12">
+                        <n-switch v-model:value="enableAI">
+                          <template #checked>启用 AI 深度分析</template>
+                          <template #unchecked>使用传统模式</template>
+                        </n-switch>
+                        
+                        <n-alert v-if="enableAI" type="info" size="small">
+                          AI 模式将提供更深入的概念理解和语义关系识别
+                        </n-alert>
+
+                        <n-form-item v-if="enableAI" label="自定义分析提示（可选）">
+                          <n-input
+                            v-model:value="userPrompt"
+                            type="textarea"
+                            placeholder="例如：重点关注技术架构和设计模式..."
+                            :rows="3"
+                            :maxlength="500"
+                            show-count
+                          />
+                        </n-form-item>
+
+                        <n-checkbox v-if="enableAI && userPrompt" v-model:checked="optimizePrompt">
+                          让 AI 优化我的提示词
+                        </n-checkbox>
+                      </n-space>
+                    </n-collapse-item>
+                  </n-collapse>
+                </div>
+
                 <n-button
                   type="primary"
                   :loading="uploading"
@@ -77,7 +110,7 @@
                   <template #icon>
                     <n-icon><rocket-outline /></n-icon>
                   </template>
-                  {{ t('upload.upload_process') }}
+                  {{ enableAI ? '🤖 AI 智能处理' : t('upload.upload_process') }}
                 </n-button>
               </div>
             </div>
@@ -109,6 +142,40 @@
                     show-count
                   />
                 </n-form-item>
+                
+                <!-- AI 配置选项 -->
+                <div class="ai-config-section">
+                  <n-collapse>
+                    <n-collapse-item title="🤖 AI 智能分析（可选）" name="ai-config">
+                      <n-space vertical :size="12">
+                        <n-switch v-model:value="enableAI">
+                          <template #checked>启用 AI 深度分析</template>
+                          <template #unchecked>使用传统模式</template>
+                        </n-switch>
+                        
+                        <n-alert v-if="enableAI" type="info" size="small">
+                          AI 模式将提供更深入的概念理解和语义关系识别
+                        </n-alert>
+
+                        <n-form-item v-if="enableAI" label="自定义分析提示（可选）">
+                          <n-input
+                            v-model:value="userPrompt"
+                            type="textarea"
+                            placeholder="例如：重点关注技术架构和设计模式..."
+                            :rows="3"
+                            :maxlength="500"
+                            show-count
+                          />
+                        </n-form-item>
+
+                        <n-checkbox v-if="enableAI && userPrompt" v-model:checked="optimizePrompt">
+                          让 AI 优化我的提示词
+                        </n-checkbox>
+                      </n-space>
+                    </n-collapse-item>
+                  </n-collapse>
+                </div>
+
                 <n-button
                   type="primary"
                   :loading="uploading"
@@ -121,7 +188,7 @@
                   <template #icon>
                     <n-icon><rocket-outline /></n-icon>
                   </template>
-                  提交文本并处理
+                  {{ enableAI ? '🤖 AI 智能处理' : '提交文本并处理' }}
                 </n-button>
               </n-form>
             </div>
@@ -157,6 +224,40 @@
                 <n-alert type="info" style="margin-bottom: 16px">
                   系统将自动抓取网页内容并提取文本，支持大部分公开网页
                 </n-alert>
+                
+                <!-- AI 配置选项 -->
+                <div class="ai-config-section">
+                  <n-collapse>
+                    <n-collapse-item title="🤖 AI 智能分析（可选）" name="ai-config">
+                      <n-space vertical :size="12">
+                        <n-switch v-model:value="enableAI">
+                          <template #checked>启用 AI 深度分析</template>
+                          <template #unchecked>使用传统模式</template>
+                        </n-switch>
+                        
+                        <n-alert v-if="enableAI" type="info" size="small">
+                          AI 模式将提供更深入的概念理解和语义关系识别
+                        </n-alert>
+
+                        <n-form-item v-if="enableAI" label="自定义分析提示（可选）">
+                          <n-input
+                            v-model:value="userPrompt"
+                            type="textarea"
+                            placeholder="例如：重点关注技术架构和设计模式..."
+                            :rows="3"
+                            :maxlength="500"
+                            show-count
+                          />
+                        </n-form-item>
+
+                        <n-checkbox v-if="enableAI && userPrompt" v-model:checked="optimizePrompt">
+                          让 AI 优化我的提示词
+                        </n-checkbox>
+                      </n-space>
+                    </n-collapse-item>
+                  </n-collapse>
+                </div>
+
                 <n-button
                   type="primary"
                   :loading="uploading"
@@ -169,7 +270,7 @@
                   <template #icon>
                     <n-icon><rocket-outline /></n-icon>
                   </template>
-                  抓取网页并处理
+                  {{ enableAI ? '🤖 AI 智能处理' : '抓取网页并处理' }}
                 </n-button>
               </n-form>
             </div>
@@ -222,6 +323,19 @@
             />
           </div>
 
+          <!-- AI Mode Badge -->
+          <n-alert v-if="currentTask?.aiMode" type="success" style="margin-bottom: 16px">
+            <template #icon>
+              <n-icon><sparkles-outline /></n-icon>
+            </template>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>🤖 AI 智能分析模式</span>
+              <n-tag v-if="currentTask?.aiStats?.model" type="info" size="small">
+                {{ currentTask.aiStats.model }}
+              </n-tag>
+            </div>
+          </n-alert>
+
           <!-- Stats (when completed) -->
           <div v-if="processCompleted && processStats" class="stats-grid">
             <div class="stat-item">
@@ -236,6 +350,50 @@
               <div class="stat-value">{{ processStats.concepts }}</div>
               <div class="stat-label">概念数量</div>
             </div>
+          </div>
+
+          <!-- AI Tokens Usage (when AI mode and completed) -->
+          <div v-if="processCompleted && currentTask?.aiMode && currentTask?.aiStats" class="ai-stats-section">
+            <n-divider style="margin: 20px 0">AI Tokens 用量</n-divider>
+            <div class="ai-stats-grid">
+              <div class="ai-stat-item">
+                <div class="ai-stat-icon">📊</div>
+                <div class="ai-stat-content">
+                  <div class="ai-stat-label">总 Tokens</div>
+                  <div class="ai-stat-value">{{ formatNumber(currentTask.aiStats.totalTokens) }}</div>
+                </div>
+              </div>
+              <div class="ai-stat-item">
+                <div class="ai-stat-icon">📝</div>
+                <div class="ai-stat-content">
+                  <div class="ai-stat-label">输入 Tokens</div>
+                  <div class="ai-stat-value">{{ formatNumber(currentTask.aiStats.promptTokens) }}</div>
+                </div>
+              </div>
+              <div class="ai-stat-item">
+                <div class="ai-stat-icon">💬</div>
+                <div class="ai-stat-content">
+                  <div class="ai-stat-label">输出 Tokens</div>
+                  <div class="ai-stat-value">{{ formatNumber(currentTask.aiStats.completionTokens) }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI Insights (when available) -->
+          <div v-if="processCompleted && currentTask?.insights && currentTask.insights.length > 0" class="insights-section">
+            <n-divider style="margin: 20px 0">💡 知识洞察</n-divider>
+            <n-space vertical :size="8">
+              <n-alert 
+                v-for="(insight, index) in currentTask.insights" 
+                :key="index"
+                type="info"
+                size="small"
+                style="font-size: 13px;"
+              >
+                {{ insight }}
+              </n-alert>
+            </n-space>
           </div>
 
           <!-- Error Message -->
@@ -287,7 +445,8 @@ import {
   CheckmarkCircleOutline,
   AddCircleOutline,
   GlobeOutline,
-  LinkOutline
+  LinkOutline,
+  SparklesOutline
 } from '@vicons/ionicons5'
 import { uploadFile, uploadText, uploadUrl } from '@/api/services'
 
@@ -309,6 +468,11 @@ const textTitle = ref('')
 // URL input state
 const urlInput = ref('')
 const urlTitle = ref('')
+
+// AI configuration state
+const enableAI = ref(false)
+const userPrompt = ref('')
+const optimizePrompt = ref(true)
 
 // Common state
 const uploading = ref(false)
@@ -336,6 +500,11 @@ const formatFileSize = (bytes) => {
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
+const formatNumber = (num) => {
+  if (!num) return '0'
+  return num.toLocaleString('zh-CN')
 }
 
 const getFileType = (filename) => {
@@ -409,7 +578,13 @@ const handleUpload = async () => {
   resetState()
   
   try {
-    const result = await uploadFile(selectedFile.value)
+    const aiOptions = enableAI.value ? {
+      enableAI: true,
+      userPrompt: userPrompt.value || undefined,
+      optimizePrompt: optimizePrompt.value
+    } : undefined
+    
+    const result = await uploadFile(selectedFile.value, aiOptions)
     uploadResult.value = result
     
     if (result.status === 'duplicate') {
@@ -463,10 +638,17 @@ const handleTextUpload = async () => {
   resetState()
   
   try {
+    const aiOptions = enableAI.value ? {
+      enableAI: true,
+      userPrompt: userPrompt.value || undefined,
+      optimizePrompt: optimizePrompt.value
+    } : undefined
+    
     const result = await uploadText(
       textContent.value,
       textTitle.value || undefined,
-      true // auto_process
+      true, // auto_process
+      aiOptions
     )
     
     uploadResult.value = result
@@ -517,10 +699,17 @@ const handleUrlUpload = async () => {
   resetState()
   
   try {
+    const aiOptions = enableAI.value ? {
+      enableAI: true,
+      userPrompt: userPrompt.value || undefined,
+      optimizePrompt: optimizePrompt.value
+    } : undefined
+    
     const result = await uploadUrl(
       urlInput.value,
       urlTitle.value || undefined,
-      true // auto_process
+      true, // auto_process
+      aiOptions
     )
     
     uploadResult.value = result
@@ -977,6 +1166,86 @@ const resetUpload = () => {
         transform: translateY(-2px);
         box-shadow: 0 6px 16px rgba(194, 164, 116, 0.4);
       }
+    }
+
+    // AI Stats Section
+    .ai-stats-section {
+      margin-top: 20px;
+
+      .ai-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+
+        .ai-stat-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px;
+          background: linear-gradient(135deg, rgba(194, 164, 116, 0.08) 0%, rgba(155, 135, 245, 0.08) 100%);
+          border-radius: 10px;
+          border: 1px solid rgba(194, 164, 116, 0.15);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+          &:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(194, 164, 116, 0.2);
+          }
+
+          .ai-stat-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+          }
+
+          .ai-stat-content {
+            flex: 1;
+            min-width: 0;
+
+            .ai-stat-label {
+              font-size: 12px;
+              color: #64748b;
+              font-weight: 500;
+              margin-bottom: 4px;
+            }
+
+            .ai-stat-value {
+              font-size: 18px;
+              font-weight: 700;
+              background: linear-gradient(135deg, #c2a474 0%, #9b87f5 100%);
+              -webkit-background-clip: text;
+              -webkit-text-fill-color: transparent;
+              background-clip: text;
+            }
+          }
+        }
+      }
+    }
+
+    // Insights Section
+    .insights-section {
+      margin-top: 20px;
+    }
+  }
+
+  // AI Config Section
+  .ai-config-section {
+    margin: 16px 0;
+
+    :deep(.n-collapse) {
+      border-radius: 12px;
+      overflow: hidden;
+      background: linear-gradient(135deg, rgba(194, 164, 116, 0.05) 0%, rgba(155, 135, 245, 0.05) 100%);
+      border: 1px solid rgba(194, 164, 116, 0.2);
+    }
+
+    :deep(.n-collapse-item__header) {
+      font-weight: 600;
+      color: #1e293b;
+      padding: 12px 16px;
+    }
+
+    :deep(.n-collapse-item__content-wrapper) {
+      padding: 0 16px 16px;
     }
   }
 }
