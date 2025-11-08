@@ -44,11 +44,18 @@ export interface GraphData {
 }
 
 export interface JobStatus {
-  job_id: string
+  jobId?: string
+  documentId?: string
   status: string
   progress?: number
   message?: string
   error?: string
+  stats?: {
+    chunks: number
+    triplets: number
+    concepts: number
+    textLength?: number
+  }
 }
 
 export interface AISettings {
@@ -68,11 +75,12 @@ export interface Settings {
 export const getDashboardStats = (): Promise<DashboardStats> => 
   api.get('/graph/stats')
 
-// Upload
+// Upload - 统一使用 /uploads/process 接口，自动处理
 export const uploadFile = (file: File): Promise<UploadResponse> => {
   const formData = new FormData()
   formData.append('file', file)
-  return api.post('/uploads', formData, {
+  formData.append('auto_process', 'true')
+  return api.post('/uploads/process', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
@@ -114,9 +122,9 @@ export const getEdges = (relType: string | null = null, limit: number = 100): Pr
   return api.get('/graph/edges', { params })
 }
 
-// Status
+// Status - 统一使用 /uploads/status 接口
 export const getJobStatus = (jobId: string): Promise<JobStatus> => 
-  api.get(`/ingest/status/${jobId}`)
+  api.get(`/uploads/status/${jobId}`)
 
 // Settings
 export const getSettings = (): Promise<Settings> => 

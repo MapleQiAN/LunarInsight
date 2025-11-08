@@ -216,8 +216,8 @@ def process_document_background(doc_id: str, file_path: str, kind: str, job_id: 
 
 @router.post("/process", response_model=dict)
 async def upload_and_process(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = None,
     auto_process: bool = True
 ):
     """

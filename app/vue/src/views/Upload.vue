@@ -177,68 +177,83 @@
         </n-tabs>
       </n-card>
 
-      <!-- Success Card -->
+      <!-- Processing Progress Card -->
       <transition name="slide-fade">
-        <n-card v-if="uploadResult" class="success-card" :bordered="false">
+        <n-card v-if="processing || processCompleted || processFailed" class="progress-card" :bordered="false">
           <div class="section-header">
-            <n-icon size="20"><checkmark-circle-outline /></n-icon>
-            <h3>{{ t('upload.upload_success') }}</h3>
+            <n-icon size="20">
+              <checkmark-circle-outline v-if="processCompleted" />
+              <close-outline v-else-if="processFailed" />
+              <rocket-outline v-else />
+            </n-icon>
+            <h3>
+              <span v-if="processCompleted">处理完成</span>
+              <span v-else-if="processFailed">处理失败</span>
+              <span v-else>正在处理文档</span>
+            </h3>
           </div>
 
-          <n-descriptions bordered :column="1" class="result-descriptions">
+          <!-- Document Info -->
+          <n-descriptions v-if="uploadResult" bordered :column="1" class="result-descriptions" style="margin-bottom: 20px">
             <n-descriptions-item label="文档 ID">
               <n-text code strong>{{ uploadResult.documentId }}</n-text>
             </n-descriptions-item>
-            <n-descriptions-item label="上传时间">
-              <n-text>{{ new Date().toLocaleString('zh-CN') }}</n-text>
+            <n-descriptions-item label="文件名">
+              <n-text>{{ uploadResult.filename }}</n-text>
+            </n-descriptions-item>
+            <n-descriptions-item v-if="jobId" label="任务 ID">
+              <n-text code>{{ jobId }}</n-text>
             </n-descriptions-item>
           </n-descriptions>
 
-          <n-button
-            type="primary"
-            :loading="ingesting"
-            @click="handleIngestion"
-            block
-            size="large"
-            class="action-button"
-          >
-            <template #icon>
-              <n-icon><play-circle-outline /></n-icon>
-            </template>
-            {{ t('upload.start_ingestion') }}
-          </n-button>
-        </n-card>
-      </transition>
-
-      <!-- Ingestion Started Card -->
-      <transition name="slide-fade">
-        <n-card v-if="ingestionResult" class="ingestion-card" :bordered="false">
-          <div class="section-header">
-            <n-icon size="20"><code-working-outline /></n-icon>
-            <h3>{{ t('upload.ingestion_started') }}</h3>
+          <!-- Progress Bar -->
+          <div v-if="processing || processCompleted" class="progress-section">
+            <div class="progress-info">
+              <span class="progress-label">{{ progressMessage || '处理中...' }}</span>
+              <span class="progress-percent">{{ progress }}%</span>
+            </div>
+            <n-progress
+              type="line"
+              :percentage="progress"
+              :status="processFailed ? 'error' : processCompleted ? 'success' : 'default'"
+              :show-indicator="false"
+              :height="12"
+              border-radius="6px"
+            />
           </div>
 
-          <n-descriptions bordered :column="1" class="result-descriptions">
-            <n-descriptions-item label="任务 ID">
-              <n-text code strong>{{ ingestionResult.jobId }}</n-text>
-            </n-descriptions-item>
-            <n-descriptions-item label="状态">
-              <n-tag type="info" round>处理中</n-tag>
-            </n-descriptions-item>
-          </n-descriptions>
+          <!-- Stats (when completed) -->
+          <div v-if="processCompleted && processStats" class="stats-grid">
+            <div class="stat-item">
+              <div class="stat-value">{{ processStats.chunks }}</div>
+              <div class="stat-label">文本块</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value">{{ processStats.triplets }}</div>
+              <div class="stat-label">知识三元组</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value">{{ processStats.concepts }}</div>
+              <div class="stat-label">概念数量</div>
+            </div>
+          </div>
 
+          <!-- Error Message -->
+          <n-alert v-if="processFailed" type="error" style="margin-top: 16px">
+            {{ progressMessage || '处理过程中发生错误' }}
+          </n-alert>
+
+          <!-- Actions -->
           <n-space vertical :size="12" style="margin-top: 20px">
             <n-button
+              v-if="processCompleted"
               type="primary"
-              @click="$router.push(`/status?jobId=${ingestionResult.jobId}`)"
+              @click="$router.push('/graph')"
               block
               size="large"
               class="action-button"
             >
-              <template #icon>
-                <n-icon><time-outline /></n-icon>
-              </template>
-              {{ t('status.check_status') }}
+              查看知识图谱
             </n-button>
             
             <n-button
@@ -249,7 +264,7 @@
               <template #icon>
                 <n-icon><add-circle-outline /></n-icon>
               </template>
-              {{ t('upload.upload_new') }}
+              上传新文档
             </n-button>
           </n-space>
         </n-card>
@@ -259,7 +274,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
@@ -268,15 +283,12 @@ import {
   DocumentTextOutline,
   CloseOutline,
   RocketOutline,
-  PlayCircleOutline,
-  TimeOutline,
   CheckmarkCircleOutline,
-  CodeWorkingOutline,
   AddCircleOutline,
   GlobeOutline,
   LinkOutline
 } from '@vicons/ionicons5'
-import { uploadFile, uploadText, uploadUrl, startIngestion } from '@/api/services'
+import { uploadFile, uploadText, uploadUrl, getJobStatus } from '@/api/services'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -298,9 +310,19 @@ const urlTitle = ref('')
 
 // Common state
 const uploading = ref(false)
-const ingesting = ref(false)
 const uploadResult = ref(null)
-const ingestionResult = ref(null)
+
+// Processing state
+const processing = ref(false)
+const jobId = ref(null)
+const progress = ref(0)
+const progressMessage = ref('')
+const processCompleted = ref(false)
+const processFailed = ref(false)
+const processStats = ref(null)
+
+// Polling
+let pollTimer = null
 
 const formatFileSize = (bytes) => {
   if (bytes === 0) return '0 Bytes'
@@ -355,17 +377,69 @@ const handleFileChange = ({ file, fileList }) => {
     }
     
     selectedFile.value = file.file
-    uploadResult.value = null
-    ingestionResult.value = null
+    resetState()
     message.success(t('upload.file_selected', { name: file.file.name }))
   }
 }
 
 const removeFile = () => {
   selectedFile.value = null
-  uploadResult.value = null
-  ingestionResult.value = null
+  resetState()
 }
+
+// Reset all state
+const resetState = () => {
+  uploadResult.value = null
+  processing.value = false
+  jobId.value = null
+  progress.value = 0
+  progressMessage.value = ''
+  processCompleted.value = false
+  processFailed.value = false
+  processStats.value = null
+  stopPolling()
+}
+
+// Start polling job status
+const startPolling = (jid) => {
+  jobId.value = jid
+  processing.value = true
+  pollTimer = setInterval(async () => {
+    try {
+      const status = await getJobStatus(jid)
+      progress.value = status.progress || 0
+      progressMessage.value = status.message || ''
+      
+      if (status.status === 'completed') {
+        processCompleted.value = true
+        processing.value = false
+        processStats.value = status.stats
+        stopPolling()
+        message.success('文档处理完成！')
+      } else if (status.status === 'failed') {
+        processFailed.value = true
+        processing.value = false
+        stopPolling()
+        message.error(status.message || '处理失败')
+      }
+    } catch (error) {
+      console.error('Failed to fetch job status:', error)
+    }
+  }, 1000) // Poll every 1 second
+}
+
+// Stop polling
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+// Cleanup on unmount
+onUnmounted(() => {
+  stopPolling()
+})
 
 const handleUpload = async () => {
   if (!selectedFile.value) {
@@ -374,32 +448,29 @@ const handleUpload = async () => {
   }
 
   uploading.value = true
+  resetState()
+  
   try {
     const result = await uploadFile(selectedFile.value)
     uploadResult.value = result
-    message.success(t('upload.upload_success'))
+    
+    if (result.status === 'duplicate') {
+      message.warning(result.message || '文档已存在')
+      uploading.value = false
+      return
+    }
+    
+    if (result.jobId) {
+      message.success('文件上传成功，开始处理...')
+      uploading.value = false
+      startPolling(result.jobId)
+    } else {
+      message.success(t('upload.upload_success'))
+      uploading.value = false
+    }
   } catch (error) {
     message.error(t('upload.error') + ': ' + error.message)
-  } finally {
     uploading.value = false
-  }
-}
-
-const handleIngestion = async () => {
-  if (!uploadResult.value?.documentId) {
-    message.warning(t('upload.document_id'))
-    return
-  }
-
-  ingesting.value = true
-  try {
-    const result = await startIngestion(uploadResult.value.documentId)
-    ingestionResult.value = result
-    message.success(t('upload.ingestion_started'))
-  } catch (error) {
-    message.error(t('upload.error') + ': ' + error.message)
-  } finally {
-    ingesting.value = false
   }
 }
 
@@ -421,6 +492,8 @@ const handleTextUpload = async () => {
   }
 
   uploading.value = true
+  resetState()
+  
   try {
     const result = await uploadText(
       textContent.value,
@@ -430,15 +503,19 @@ const handleTextUpload = async () => {
     
     uploadResult.value = result
     
-    // Check if auto-processed
+    if (result.status === 'duplicate') {
+      message.warning(result.message || '文档已存在')
+      uploading.value = false
+      return
+    }
+    
     if (result.jobId) {
-      ingestionResult.value = {
-        jobId: result.jobId,
-        documentId: result.documentId
-      }
-      message.success('文本已提交并开始处理')
+      message.success('文本已提交，开始处理...')
+      uploading.value = false
+      startPolling(result.jobId)
     } else {
       message.success('文本已保存')
+      uploading.value = false
     }
     
     // Clear form
@@ -447,7 +524,6 @@ const handleTextUpload = async () => {
   } catch (error) {
     console.error('Text upload failed:', error)
     message.error(error.message || '文本提交失败')
-  } finally {
     uploading.value = false
   }
 }
@@ -460,6 +536,8 @@ const handleUrlUpload = async () => {
   }
 
   uploading.value = true
+  resetState()
+  
   try {
     const result = await uploadUrl(
       urlInput.value,
@@ -469,15 +547,19 @@ const handleUrlUpload = async () => {
     
     uploadResult.value = result
     
-    // Check if auto-processed
+    if (result.status === 'duplicate') {
+      message.warning(result.message || '文档已存在')
+      uploading.value = false
+      return
+    }
+    
     if (result.jobId) {
-      ingestionResult.value = {
-        jobId: result.jobId,
-        documentId: result.documentId
-      }
-      message.success('网页内容已抓取并开始处理')
+      message.success('网页内容已抓取，开始处理...')
+      uploading.value = false
+      startPolling(result.jobId)
     } else {
       message.success('网页内容已保存')
+      uploading.value = false
     }
     
     // Clear form
@@ -486,7 +568,6 @@ const handleUrlUpload = async () => {
   } catch (error) {
     console.error('URL upload failed:', error)
     message.error(error.message || '网页抓取失败')
-  } finally {
     uploading.value = false
   }
 }
@@ -497,8 +578,7 @@ const resetUpload = () => {
   textTitle.value = ''
   urlInput.value = ''
   urlTitle.value = ''
-  uploadResult.value = null
-  ingestionResult.value = null
+  resetState()
   activeTab.value = 'file'
 }
 </script>
@@ -801,15 +881,15 @@ const resetUpload = () => {
     }
   }
 
-  // Success Card
-  .success-card {
+  // Progress Card
+  .progress-card {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%);
     border-radius: 20px;
     backdrop-filter: blur(10px);
     box-shadow: 
       0 8px 32px rgba(0, 0, 0, 0.06),
       0 2px 12px rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(194, 164, 116, 0.2);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     &:hover {
@@ -819,69 +899,95 @@ const resetUpload = () => {
     }
 
     .result-descriptions {
-      margin-bottom: 20px;
-      
       :deep(.n-descriptions) {
         border-radius: 12px;
         overflow: hidden;
       }
     }
 
-    .action-button {
-      height: 48px;
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
+    .progress-section {
+      padding: 20px;
+      background: linear-gradient(135deg, rgba(194, 164, 116, 0.05) 0%, rgba(155, 135, 245, 0.05) 100%);
       border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      margin-bottom: 16px;
 
-      &:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+      .progress-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+
+        .progress-label {
+          font-size: 14px;
+          font-weight: 600;
+          color: #1e293b;
+        }
+
+        .progress-percent {
+          font-size: 16px;
+          font-weight: 700;
+          color: #c2a474;
+          letter-spacing: 0.5px;
+        }
+      }
+
+      :deep(.n-progress) {
+        .n-progress-graph {
+          .n-progress-graph-line-fill {
+            background: linear-gradient(90deg, #c2a474 0%, #9b87f5 50%, #f59e0b 100%);
+          }
+        }
       }
     }
-  }
 
-  // Ingestion Card
-  .ingestion-card {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.8) 100%);
-    border-radius: 20px;
-    backdrop-filter: blur(10px);
-    box-shadow: 
-      0 8px 32px rgba(0, 0, 0, 0.06),
-      0 2px 12px rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 20px;
 
-    &:hover {
-      box-shadow: 
-        0 12px 40px rgba(0, 0, 0, 0.08),
-        0 4px 16px rgba(0, 0, 0, 0.06);
-    }
-
-    .result-descriptions {
-      margin-bottom: 20px;
-      
-      :deep(.n-descriptions) {
+      .stat-item {
+        padding: 16px;
+        background: linear-gradient(135deg, rgba(194, 164, 116, 0.08) 0%, rgba(155, 135, 245, 0.08) 100%);
         border-radius: 12px;
-        overflow: hidden;
-      }
-    }
-
-    .action-button {
-      height: 48px;
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-      border-radius: 12px;
-
-      &:first-of-type {
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        text-align: center;
+        border: 1px solid rgba(194, 164, 116, 0.15);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
         &:hover {
           transform: translateY(-2px);
-          box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+          box-shadow: 0 4px 12px rgba(194, 164, 116, 0.2);
         }
+
+        .stat-value {
+          font-size: 28px;
+          font-weight: 700;
+          background: linear-gradient(135deg, #c2a474 0%, #9b87f5 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          margin-bottom: 4px;
+        }
+
+        .stat-label {
+          font-size: 13px;
+          color: #64748b;
+          font-weight: 500;
+        }
+      }
+    }
+
+    .action-button {
+      height: 48px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(194, 164, 116, 0.3);
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(194, 164, 116, 0.4);
       }
     }
   }
