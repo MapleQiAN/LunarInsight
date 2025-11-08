@@ -1,59 +1,69 @@
 <template>
   <div class="status">
-    <el-card shadow="never" class="page-header">
-      <h2>{{ t('status.title') }}</h2>
-    </el-card>
+    <n-page-header :title="t('status.title')" />
 
-    <el-card shadow="never">
-      <el-form :inline="true">
-        <el-form-item :label="t('status.job_id')">
-          <el-input
-            v-model="jobId"
-            :placeholder="t('status.job_id_help')"
-            style="width: 300px"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="checking" @click="checkStatus">
-            {{ t('status.check_status') }}
-          </el-button>
-        </el-form-item>
-      </el-form>
+    <n-card>
+      <n-space :size="16" style="margin-bottom: 20px">
+        <n-input
+          v-model:value="jobId"
+          :placeholder="t('status.job_id_help')"
+          style="width: 300px"
+        >
+          <template #prefix>
+            {{ t('status.job_id') }}:
+          </template>
+        </n-input>
+        
+        <n-button type="primary" :loading="checking" @click="checkStatus">
+          <template #icon>
+            <n-icon><search-outline /></n-icon>
+          </template>
+          {{ t('status.check_status') }}
+        </n-button>
+      </n-space>
 
-      <el-divider v-if="statusData" />
+      <n-divider v-if="statusData" />
 
       <div v-if="statusData" class="status-result">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item :label="t('status.status')">
-            <el-tag :type="getStatusType(statusData.status)">
-              {{ getStatusText(statusData.status) }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('status.progress')">
-            {{ statusData.progress || 'N/A' }}
-          </el-descriptions-item>
-        </el-descriptions>
+        <n-space vertical :size="16">
+          <n-card :title="t('status.status')" size="small">
+            <n-space :size="16">
+              <div class="status-item">
+                <n-text strong>{{ t('status.status') }}:</n-text>
+                <n-tag :type="getStatusType(statusData.status)" round>
+                  {{ getStatusText(statusData.status) }}
+                </n-tag>
+              </div>
+              
+              <div class="status-item">
+                <n-text strong>{{ t('status.progress') }}:</n-text>
+                <n-text>{{ statusData.progress || 'N/A' }}</n-text>
+              </div>
+            </n-space>
+          </n-card>
 
-        <el-card v-if="statusData.statistics" shadow="never" style="margin-top: 20px">
-          <template #header>
-            <span>{{ t('status.statistics') }}</span>
-          </template>
-          <pre class="json-view">{{ JSON.stringify(statusData.statistics, null, 2) }}</pre>
-        </el-card>
+          <n-card v-if="statusData.statistics" :title="t('status.statistics')" size="small">
+            <n-code :code="JSON.stringify(statusData.statistics, null, 2)" language="json" />
+          </n-card>
 
-        <el-card v-if="statusData.result" shadow="never" style="margin-top: 20px">
-          <template #header>
-            <span>{{ t('status.view_full_result') }}</span>
-          </template>
-          <pre class="json-view">{{ JSON.stringify(statusData.result, null, 2) }}</pre>
-        </el-card>
+          <n-card v-if="statusData.result" :title="t('status.view_full_result')" size="small">
+            <n-code :code="JSON.stringify(statusData.result, null, 2)" language="json" />
+          </n-card>
+        </n-space>
       </div>
 
-      <el-empty
+      <n-empty
         v-else-if="!checking && !jobId"
         :description="t('status.enter_job_id')"
-      />
-    </el-card>
+        size="large"
+      >
+        <template #icon>
+          <n-icon size="48">
+            <document-text-outline />
+          </n-icon>
+        </template>
+      </n-empty>
+    </n-card>
   </div>
 </template>
 
@@ -61,11 +71,14 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { useMessage } from 'naive-ui'
+import { SearchOutline, DocumentTextOutline } from '@vicons/ionicons5'
 import { getJobStatus } from '@/api/services'
 
 const { t } = useI18n()
 const route = useRoute()
+const message = useMessage()
+
 const jobId = ref(route.query.jobId || '')
 const checking = ref(false)
 const statusData = ref(null)
@@ -75,9 +88,9 @@ const getStatusType = (status) => {
     completed: 'success',
     processing: 'warning',
     pending: 'info',
-    failed: 'danger'
+    failed: 'error'
   }
-  return statusMap[status] || 'info'
+  return statusMap[status] || 'default'
 }
 
 const getStatusText = (status) => {
@@ -86,7 +99,7 @@ const getStatusText = (status) => {
 
 const checkStatus = async () => {
   if (!jobId.value.trim()) {
-    ElMessage.warning(t('status.job_id_help'))
+    message.warning(t('status.job_id_help'))
     return
   }
 
@@ -94,8 +107,9 @@ const checkStatus = async () => {
   try {
     const result = await getJobStatus(jobId.value)
     statusData.value = result
+    message.success(t('common.success'))
   } catch (error) {
-    ElMessage.error(t('status.fetch_error'))
+    message.error(t('status.fetch_error'))
     statusData.value = null
   } finally {
     checking.value = false
@@ -111,24 +125,10 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .status {
-  .page-header {
-    margin-bottom: 20px;
-    h2 {
-      margin: 0;
-      font-size: 1.5rem;
-      font-weight: 600;
-    }
-  }
-
-  .json-view {
-    background: #f5f7fa;
-    padding: 1rem;
-    border-radius: 4px;
-    overflow-x: auto;
-    font-family: 'Courier New', monospace;
-    font-size: 0.875rem;
-    line-height: 1.5;
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 }
 </style>
-

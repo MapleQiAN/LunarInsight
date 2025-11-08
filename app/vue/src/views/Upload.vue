@@ -1,109 +1,130 @@
 <template>
   <div class="upload">
-    <el-card shadow="never" class="page-header">
-      <h2>{{ t('upload.title') }}</h2>
-    </el-card>
+    <n-page-header :title="t('upload.title')" />
 
-    <el-card shadow="never">
-      <el-upload
-        ref="uploadRef"
-        :auto-upload="false"
-        :on-change="handleFileChange"
-        :limit="1"
-        drag
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">
-          {{ t('upload.choose_file') }}<em>{{ t('upload.supported_formats') }}</em>
-        </div>
-      </el-upload>
+    <n-space vertical :size="16">
+      <n-card>
+        <n-upload
+          :max="1"
+          :default-upload="false"
+          @change="handleFileChange"
+          :show-file-list="false"
+        >
+          <n-upload-dragger>
+            <div style="padding: 40px 0">
+              <n-icon size="48" :depth="3">
+                <cloud-upload-outline />
+              </n-icon>
+              <n-text style="font-size: 16px; display: block; margin-top: 12px">
+                {{ t('upload.choose_file') }}
+              </n-text>
+              <n-text depth="3" style="font-size: 12px; display: block; margin-top: 8px">
+                {{ t('upload.supported_formats') }}
+              </n-text>
+            </div>
+          </n-upload-dragger>
+        </n-upload>
 
-      <div v-if="selectedFile" class="file-info" style="margin-top: 20px">
-        <el-descriptions :column="1" border>
-          <el-descriptions-item :label="t('upload.file')">
-            {{ selectedFile.name }}
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('upload.size')">
-            {{ formatFileSize(selectedFile.size) }} {{ t('upload.bytes') }}
-          </el-descriptions-item>
-        </el-descriptions>
+        <div v-if="selectedFile" style="margin-top: 24px">
+          <n-card size="small" :title="t('upload.file')" hoverable>
+            <n-space vertical :size="12">
+              <div class="file-info-item">
+                <n-text strong>{{ t('upload.file') }}:</n-text>
+                <n-text>{{ selectedFile.name }}</n-text>
+              </div>
+              <div class="file-info-item">
+                <n-text strong>{{ t('upload.size') }}:</n-text>
+                <n-text>{{ formatFileSize(selectedFile.size) }}</n-text>
+              </div>
+            </n-space>
+          </n-card>
 
-        <div style="margin-top: 20px">
-          <el-button
+          <n-button
             type="primary"
             :loading="uploading"
             @click="handleUpload"
-            style="width: 100%"
+            block
+            size="large"
+            style="margin-top: 16px"
           >
+            <template #icon>
+              <n-icon><cloud-upload-outline /></n-icon>
+            </template>
             {{ t('upload.upload_process') }}
-          </el-button>
+          </n-button>
         </div>
-      </div>
+      </n-card>
 
-      <el-divider v-if="uploadResult" />
+      <n-card v-if="uploadResult" :title="t('upload.upload_success')">
+        <n-alert type="success" :show-icon="true">
+          {{ t('upload.upload_success') }}
+        </n-alert>
+        
+        <n-descriptions bordered :column="1" style="margin-top: 16px">
+          <n-descriptions-item :label="t('upload.document_id')">
+            <n-text code>{{ uploadResult.documentId }}</n-text>
+          </n-descriptions-item>
+        </n-descriptions>
 
-      <div v-if="uploadResult" class="upload-result">
-        <el-alert
-          :title="t('upload.upload_success')"
-          type="success"
-          :closable="false"
-          show-icon
-        />
-        <el-descriptions :column="1" border style="margin-top: 20px">
-          <el-descriptions-item :label="t('upload.document_id')">
-            {{ uploadResult.documentId }}
-          </el-descriptions-item>
-        </el-descriptions>
+        <n-button
+          type="primary"
+          :loading="ingesting"
+          @click="handleIngestion"
+          block
+          size="large"
+          style="margin-top: 16px"
+        >
+          <template #icon>
+            <n-icon><play-outline /></n-icon>
+          </template>
+          {{ t('upload.start_ingestion') }}
+        </n-button>
+      </n-card>
 
-        <div style="margin-top: 20px">
-          <el-button
-            type="primary"
-            :loading="ingesting"
-            @click="handleIngestion"
-            style="width: 100%"
-          >
-            {{ t('upload.start_ingestion') }}
-          </el-button>
-        </div>
-      </div>
+      <n-card v-if="ingestionResult" :title="t('upload.ingestion_started')">
+        <n-alert type="success" :show-icon="true">
+          {{ t('upload.ingestion_started') }}
+        </n-alert>
+        
+        <n-descriptions bordered :column="1" style="margin-top: 16px">
+          <n-descriptions-item :label="t('upload.job_id')">
+            <n-text code>{{ ingestionResult.jobId }}</n-text>
+          </n-descriptions-item>
+        </n-descriptions>
 
-      <div v-if="ingestionResult" class="ingestion-result" style="margin-top: 20px">
-        <el-alert
-          :title="t('upload.ingestion_started')"
-          type="success"
-          :closable="false"
-          show-icon
-        />
-        <el-descriptions :column="1" border style="margin-top: 20px">
-          <el-descriptions-item :label="t('upload.job_id')">
-            {{ ingestionResult.jobId }}
-          </el-descriptions-item>
-        </el-descriptions>
-        <el-alert
-          :title="t('upload.check_status')"
-          type="info"
-          :closable="false"
-          style="margin-top: 20px"
-        />
-        <div style="margin-top: 20px">
-          <el-button @click="$router.push(`/status?jobId=${ingestionResult.jobId}`)">
-            {{ t('status.check_status') }}
-          </el-button>
-        </div>
-      </div>
-    </el-card>
+        <n-alert type="info" style="margin-top: 16px">
+          {{ t('upload.check_status') }}
+        </n-alert>
+
+        <n-button
+          type="primary"
+          @click="$router.push(`/status?jobId=${ingestionResult.jobId}`)"
+          block
+          size="large"
+          style="margin-top: 16px"
+        >
+          <template #icon>
+            <n-icon><time-outline /></n-icon>
+          </template>
+          {{ t('status.check_status') }}
+        </n-button>
+      </n-card>
+    </n-space>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { useMessage } from 'naive-ui'
+import { CloudUploadOutline, PlayOutline, TimeOutline } from '@vicons/ionicons5'
 import { uploadFile, startIngestion } from '@/api/services'
 
+const router = useRouter()
 const { t } = useI18n()
-const uploadRef = ref(null)
+const message = useMessage()
+
 const selectedFile = ref(null)
 const uploading = ref(false)
 const ingesting = ref(false)
@@ -111,22 +132,24 @@ const uploadResult = ref(null)
 const ingestionResult = ref(null)
 
 const formatFileSize = (bytes) => {
-  if (bytes === 0) return '0'
+  if (bytes === 0) return '0 Bytes'
   const k = 1024
   const sizes = ['Bytes', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
 
-const handleFileChange = (file) => {
-  selectedFile.value = file.raw
-  uploadResult.value = null
-  ingestionResult.value = null
+const handleFileChange = ({ file, fileList }) => {
+  if (file) {
+    selectedFile.value = file.file
+    uploadResult.value = null
+    ingestionResult.value = null
+  }
 }
 
 const handleUpload = async () => {
   if (!selectedFile.value) {
-    ElMessage.warning(t('upload.choose_file'))
+    message.warning(t('upload.choose_file'))
     return
   }
 
@@ -134,9 +157,9 @@ const handleUpload = async () => {
   try {
     const result = await uploadFile(selectedFile.value)
     uploadResult.value = result
-    ElMessage.success(t('upload.upload_success'))
+    message.success(t('upload.upload_success'))
   } catch (error) {
-    ElMessage.error(t('upload.error'))
+    message.error(t('upload.error') + ': ' + error.message)
   } finally {
     uploading.value = false
   }
@@ -144,7 +167,7 @@ const handleUpload = async () => {
 
 const handleIngestion = async () => {
   if (!uploadResult.value?.documentId) {
-    ElMessage.warning(t('upload.document_id'))
+    message.warning(t('upload.document_id'))
     return
   }
 
@@ -152,9 +175,9 @@ const handleIngestion = async () => {
   try {
     const result = await startIngestion(uploadResult.value.documentId)
     ingestionResult.value = result
-    ElMessage.success(t('upload.ingestion_started'))
+    message.success(t('upload.ingestion_started'))
   } catch (error) {
-    ElMessage.error(t('upload.error'))
+    message.error(t('upload.error') + ': ' + error.message)
   } finally {
     ingesting.value = false
   }
@@ -163,13 +186,10 @@ const handleIngestion = async () => {
 
 <style lang="scss" scoped>
 .upload {
-  .page-header {
-    margin-bottom: 20px;
-    h2 {
-      margin: 0;
-      font-size: 1.5rem;
-      font-weight: 600;
-    }
+  .file-info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 }
 </style>

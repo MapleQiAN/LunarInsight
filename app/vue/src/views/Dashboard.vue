@@ -1,106 +1,127 @@
 <template>
   <div class="dashboard">
-    <el-card shadow="never" class="page-header">
-      <h2>{{ t('dashboard.title') }}</h2>
-    </el-card>
+    <n-page-header :title="t('dashboard.title')" />
 
-    <el-card shadow="never" v-loading="loading" class="metrics-card">
-      <template #header>
-        <span>{{ t('dashboard.key_metrics') }}</span>
-      </template>
-      
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <div class="metric-card metric-blue">
-            <div class="metric-label">{{ t('dashboard.total_nodes') }}</div>
-            <div class="metric-value">{{ stats.totalNodes.toLocaleString() }}</div>
-            <div class="metric-subtitle">Total Nodes</div>
-          </div>
-        </el-col>
-        <el-col :span="6">
-          <div class="metric-card metric-green">
-            <div class="metric-label">{{ t('dashboard.total_edges') }}</div>
-            <div class="metric-value">{{ stats.totalEdges.toLocaleString() }}</div>
-            <div class="metric-subtitle">Total Relationships</div>
-          </div>
-        </el-col>
-        <el-col :span="6">
-          <div class="metric-card metric-yellow">
-            <div class="metric-label">{{ t('dashboard.concepts') }}</div>
-            <div class="metric-value">{{ stats.concepts.toLocaleString() }}</div>
-            <div class="metric-subtitle">Concepts</div>
-          </div>
-        </el-col>
-        <el-col :span="6">
-          <div class="metric-card metric-gray">
-            <div class="metric-label">{{ t('dashboard.documents') }}</div>
-            <div class="metric-value">{{ stats.documents.toLocaleString() }}</div>
-            <div class="metric-subtitle">Documents</div>
-          </div>
-        </el-col>
-      </el-row>
-    </el-card>
+    <n-spin :show="loading">
+      <n-space vertical :size="16">
+        <!-- Metrics Cards -->
+        <n-grid cols="1 s:2 m:4" responsive="screen" :x-gap="16" :y-gap="16">
+          <n-gi>
+            <n-card class="metric-card metric-blue" hoverable>
+              <n-statistic :label="t('dashboard.total_nodes')" :value="stats.totalNodes">
+                <template #prefix>
+                  <n-icon size="24"><cube-outline /></n-icon>
+                </template>
+              </n-statistic>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card class="metric-card metric-green" hoverable>
+              <n-statistic :label="t('dashboard.total_edges')" :value="stats.totalEdges">
+                <template #prefix>
+                  <n-icon size="24"><git-network-outline /></n-icon>
+                </template>
+              </n-statistic>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card class="metric-card metric-yellow" hoverable>
+              <n-statistic :label="t('dashboard.concepts')" :value="stats.concepts">
+                <template #prefix>
+                  <n-icon size="24"><bulb-outline /></n-icon>
+                </template>
+              </n-statistic>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card class="metric-card metric-gray" hoverable>
+              <n-statistic :label="t('dashboard.documents')" :value="stats.documents">
+                <template #prefix>
+                  <n-icon size="24"><document-text-outline /></n-icon>
+                </template>
+              </n-statistic>
+            </n-card>
+          </n-gi>
+        </n-grid>
 
-    <el-row :gutter="20" style="margin-top: 20px">
-      <el-col :span="12">
-        <el-card shadow="never">
-          <template #header>
-            <span>{{ t('dashboard.quick_actions') }}</span>
-          </template>
-          <el-space direction="vertical" style="width: 100%">
-            <el-button type="primary" @click="$router.push('/upload')" style="width: 100%">
-              <el-icon><Upload /></el-icon>
-              {{ t('dashboard.upload_document') }}
-            </el-button>
-            <el-button @click="$router.push('/graph')" style="width: 100%">
-              <el-icon><Share /></el-icon>
-              {{ t('dashboard.view_graph') }}
-            </el-button>
-            <el-button @click="$router.push('/query')" style="width: 100%">
-              <el-icon><Search /></el-icon>
-              {{ t('dashboard.execute_query') }}
-            </el-button>
-          </el-space>
-        </el-card>
-      </el-col>
-      <el-col :span="12">
-        <el-card shadow="never">
-          <template #header>
-            <span>{{ t('dashboard.system_status') }}</span>
-          </template>
-          <el-descriptions :column="1" border>
-            <el-descriptions-item :label="t('dashboard.api_service')">
-              <el-tag type="success">运行中</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item :label="t('dashboard.graph_database')">
-              <el-tag type="success">已连接</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item :label="t('dashboard.processing_engine')">
-              <el-tag type="info">就绪</el-tag>
-            </el-descriptions-item>
-          </el-descriptions>
-        </el-card>
-      </el-col>
-    </el-row>
+        <!-- Quick Actions and System Status -->
+        <n-grid cols="1 s:1 m:2" responsive="screen" :x-gap="16" :y-gap="16">
+          <n-gi>
+            <n-card :title="t('dashboard.quick_actions')">
+              <n-space vertical :size="12">
+                <n-button type="primary" block @click="$router.push('/upload')">
+                  <template #icon>
+                    <n-icon><cloud-upload-outline /></n-icon>
+                  </template>
+                  {{ t('dashboard.upload_document') }}
+                </n-button>
+                <n-button block @click="$router.push('/graph')">
+                  <template #icon>
+                    <n-icon><git-network-outline /></n-icon>
+                  </template>
+                  {{ t('dashboard.view_graph') }}
+                </n-button>
+                <n-button block @click="$router.push('/query')">
+                  <template #icon>
+                    <n-icon><search-outline /></n-icon>
+                  </template>
+                  {{ t('dashboard.execute_query') }}
+                </n-button>
+              </n-space>
+            </n-card>
+          </n-gi>
+          
+          <n-gi>
+            <n-card :title="t('dashboard.system_status')">
+              <n-space vertical :size="12">
+                <div class="status-item">
+                  <span>{{ t('dashboard.api_service') }}</span>
+                  <n-tag type="success" round>运行中</n-tag>
+                </div>
+                <n-divider style="margin: 8px 0" />
+                <div class="status-item">
+                  <span>{{ t('dashboard.graph_database') }}</span>
+                  <n-tag type="success" round>已连接</n-tag>
+                </div>
+                <n-divider style="margin: 8px 0" />
+                <div class="status-item">
+                  <span>{{ t('dashboard.processing_engine') }}</span>
+                  <n-tag type="info" round>就绪</n-tag>
+                </div>
+              </n-space>
+            </n-card>
+          </n-gi>
+        </n-grid>
 
-    <el-card shadow="never" v-if="nodeDistribution.length > 0" style="margin-top: 20px">
-      <template #header>
-        <span>{{ t('dashboard.node_distribution') }}</span>
-      </template>
-      <el-table :data="nodeDistribution" style="width: 100%">
-        <el-table-column prop="type" :label="t('dashboard.type')" />
-        <el-table-column prop="count" :label="t('dashboard.count')" />
-      </el-table>
-    </el-card>
+        <!-- Node Distribution Table -->
+        <n-card v-if="nodeDistribution.length > 0" :title="t('dashboard.node_distribution')">
+          <n-data-table
+            :columns="columns"
+            :data="nodeDistribution"
+            :pagination="false"
+          />
+        </n-card>
+      </n-space>
+    </n-spin>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { h, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { NIcon, NTag } from 'naive-ui'
 import { getNodes, getEdges } from '@/api/services'
-import { Upload, Share, Search } from '@element-plus/icons-vue'
+import {
+  CubeOutline,
+  GitNetworkOutline,
+  BulbOutline,
+  DocumentTextOutline,
+  CloudUploadOutline,
+  SearchOutline
+} from '@vicons/ionicons5'
 
+const router = useRouter()
 const { t } = useI18n()
 const loading = ref(false)
 const stats = ref({
@@ -110,6 +131,20 @@ const stats = ref({
   documents: 0
 })
 const nodeDistribution = ref([])
+
+const columns = [
+  {
+    title: t('dashboard.type'),
+    key: 'type'
+  },
+  {
+    title: t('dashboard.count'),
+    key: 'count',
+    render: (row) => {
+      return h(NTag, { type: 'info' }, { default: () => row.count.toLocaleString() })
+    }
+  }
+]
 
 const loadStats = async () => {
   loading.value = true
@@ -153,63 +188,32 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .dashboard {
-  .page-header {
-    margin-bottom: 20px;
-    h2 {
-      margin: 0;
-      font-size: 1.5rem;
-      font-weight: 600;
-    }
-  }
-
   .metric-card {
-    padding: 1.5rem;
-    border-radius: 8px;
-    border-left: 4px solid;
-    text-align: center;
-
-    .metric-label {
-      font-size: 0.875rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 0.5rem;
-    }
-
-    .metric-value {
-      font-size: 2.5rem;
-      font-weight: 700;
-      margin: 0.5rem 0;
-    }
-
-    .metric-subtitle {
-      font-size: 0.75rem;
-      color: #64748b;
-    }
-
     &.metric-blue {
       background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-      border-color: #3b82f6;
-      color: #1e40af;
+      border-left: 4px solid #3b82f6;
     }
 
     &.metric-green {
       background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-      border-color: #10b981;
-      color: #166534;
+      border-left: 4px solid #10b981;
     }
 
     &.metric-yellow {
       background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-      border-color: #d4af37;
-      color: #92400e;
+      border-left: 4px solid #d4af37;
     }
 
     &.metric-gray {
       background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-      border-color: #6b7280;
-      color: #374151;
+      border-left: 4px solid #6b7280;
     }
+  }
+
+  .status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 }
 </style>

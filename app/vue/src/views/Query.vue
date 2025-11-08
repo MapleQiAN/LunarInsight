@@ -1,109 +1,130 @@
 <template>
   <div class="query">
-    <el-card shadow="never" class="page-header">
-      <h2>{{ t('query.title') }}</h2>
-    </el-card>
+    <n-page-header :title="t('query.title')" />
 
-    <el-card shadow="never">
-      <el-tabs v-model="activeTab">
-        <el-tab-pane :label="t('query.cypher_query')" name="cypher">
-          <el-form>
-            <el-form-item :label="t('query.enter_cypher')">
-              <el-input
-                v-model="cypherQuery"
-                type="textarea"
-                :rows="6"
-                :placeholder="t('query.cypher_help')"
-              />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" :loading="executing" @click="executeCypher">
-                {{ t('query.execute') }}
-              </el-button>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
+    <n-card>
+      <n-tabs v-model:value="activeTab" type="line">
+        <n-tab-pane :name="'cypher'" :tab="t('query.cypher_query')">
+          <n-space vertical :size="16">
+            <n-input
+              v-model:value="cypherQuery"
+              type="textarea"
+              :rows="8"
+              :placeholder="t('query.cypher_help')"
+            />
+            
+            <n-button type="primary" :loading="executing" @click="executeCypher">
+              <template #icon>
+                <n-icon><play-outline /></n-icon>
+              </template>
+              {{ t('query.execute') }}
+            </n-button>
+          </n-space>
+        </n-tab-pane>
 
-        <el-tab-pane :label="t('query.get_nodes')" name="nodes">
-          <el-form :inline="true">
-            <el-form-item :label="t('query.label_optional')">
-              <el-input
-                v-model="nodeLabel"
-                :placeholder="t('query.label_help')"
-                clearable
-              />
-            </el-form-item>
-            <el-form-item :label="t('query.limit')">
-              <el-input-number v-model="nodeLimit" :min="1" :max="1000" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" :loading="fetchingNodes" @click="fetchNodes">
-                {{ t('query.get_nodes_btn') }}
-              </el-button>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
+        <n-tab-pane :name="'nodes'" :tab="t('query.get_nodes')">
+          <n-space :size="16" style="margin-bottom: 16px">
+            <n-input
+              v-model:value="nodeLabel"
+              :placeholder="t('query.label_help')"
+              clearable
+              style="width: 200px"
+            >
+              <template #prefix>
+                {{ t('query.label_optional') }}:
+              </template>
+            </n-input>
+            
+            <n-input-number
+              v-model:value="nodeLimit"
+              :min="1"
+              :max="1000"
+              style="width: 150px"
+            >
+              <template #prefix>
+                {{ t('query.limit') }}:
+              </template>
+            </n-input-number>
+            
+            <n-button type="primary" :loading="fetchingNodes" @click="fetchNodes">
+              <template #icon>
+                <n-icon><search-outline /></n-icon>
+              </template>
+              {{ t('query.get_nodes_btn') }}
+            </n-button>
+          </n-space>
+        </n-tab-pane>
 
-        <el-tab-pane :label="t('query.get_edges')" name="edges">
-          <el-form :inline="true">
-            <el-form-item :label="t('query.rel_type_optional')">
-              <el-input
-                v-model="relType"
-                :placeholder="t('query.rel_type_help')"
-                clearable
-              />
-            </el-form-item>
-            <el-form-item :label="t('query.limit')">
-              <el-input-number v-model="edgeLimit" :min="1" :max="1000" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" :loading="fetchingEdges" @click="fetchEdges">
-                {{ t('query.get_edges_btn') }}
-              </el-button>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-      </el-tabs>
+        <n-tab-pane :name="'edges'" :tab="t('query.get_edges')">
+          <n-space :size="16" style="margin-bottom: 16px">
+            <n-input
+              v-model:value="relType"
+              :placeholder="t('query.rel_type_help')"
+              clearable
+              style="width: 200px"
+            >
+              <template #prefix>
+                {{ t('query.rel_type_optional') }}:
+              </template>
+            </n-input>
+            
+            <n-input-number
+              v-model:value="edgeLimit"
+              :min="1"
+              :max="1000"
+              style="width: 150px"
+            >
+              <template #prefix>
+                {{ t('query.limit') }}:
+              </template>
+            </n-input-number>
+            
+            <n-button type="primary" :loading="fetchingEdges" @click="fetchEdges">
+              <template #icon>
+                <n-icon><search-outline /></n-icon>
+              </template>
+              {{ t('query.get_edges_btn') }}
+            </n-button>
+          </n-space>
+        </n-tab-pane>
+      </n-tabs>
 
-      <el-divider v-if="queryResult" />
+      <n-divider v-if="queryResult" />
 
       <div v-if="queryResult" class="query-result">
-        <el-alert
-          :title="t('query.success')"
-          type="success"
-          :closable="false"
-          show-icon
-          style="margin-bottom: 20px"
-        />
+        <n-alert type="success" :show-icon="true" style="margin-bottom: 16px">
+          {{ t('query.success') }}
+        </n-alert>
 
-        <el-tabs v-model="resultView">
-          <el-tab-pane :label="t('query.view_result')" name="table">
-            <el-table :data="queryResult" border style="width: 100%">
-              <el-table-column
-                v-for="(value, key) in queryResult[0]"
-                :key="key"
-                :prop="key"
-                :label="key"
-                show-overflow-tooltip
-              />
-            </el-table>
-          </el-tab-pane>
-          <el-tab-pane :label="t('query.view_raw_json')" name="json">
-            <pre class="json-view">{{ JSON.stringify(queryResult, null, 2) }}</pre>
-          </el-tab-pane>
-        </el-tabs>
+        <n-tabs v-model:value="resultView" type="card">
+          <n-tab-pane :name="'table'" :tab="t('query.view_result')">
+            <n-data-table
+              :columns="resultColumns"
+              :data="queryResult"
+              :pagination="{ pageSize: 10 }"
+              :scroll-x="1200"
+            />
+          </n-tab-pane>
+          
+          <n-tab-pane :name="'json'" :tab="t('query.view_raw_json')">
+            <n-code :code="JSON.stringify(queryResult, null, 2)" language="json" />
+          </n-tab-pane>
+        </n-tabs>
       </div>
-    </el-card>
+    </n-card>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { useMessage } from 'naive-ui'
+import { PlayOutline, SearchOutline } from '@vicons/ionicons5'
 import { executeCypherQuery, getNodes, getEdges } from '@/api/services'
 
 const { t } = useI18n()
+const message = useMessage()
+
 const activeTab = ref('cypher')
 const cypherQuery = ref('')
 const nodeLabel = ref('')
@@ -116,9 +137,29 @@ const fetchingEdges = ref(false)
 const queryResult = ref(null)
 const resultView = ref('table')
 
+const resultColumns = computed(() => {
+  if (!queryResult.value || queryResult.value.length === 0) return []
+  
+  const firstRow = queryResult.value[0]
+  return Object.keys(firstRow).map(key => ({
+    title: key,
+    key: key,
+    ellipsis: {
+      tooltip: true
+    },
+    render: (row) => {
+      const value = row[key]
+      if (typeof value === 'object') {
+        return JSON.stringify(value)
+      }
+      return String(value || '')
+    }
+  }))
+})
+
 const executeCypher = async () => {
   if (!cypherQuery.value.trim()) {
-    ElMessage.warning(t('query.enter_cypher'))
+    message.warning(t('query.enter_cypher'))
     return
   }
 
@@ -127,13 +168,13 @@ const executeCypher = async () => {
     const result = await executeCypherQuery(cypherQuery.value)
     if (Array.isArray(result) && result.length > 0) {
       queryResult.value = result
-      ElMessage.success(t('query.success'))
+      message.success(t('query.success'))
     } else {
-      ElMessage.warning(t('query.no_results'))
+      message.warning(t('query.no_results'))
       queryResult.value = null
     }
   } catch (error) {
-    ElMessage.error(t('common.error'))
+    message.error(t('common.error') + ': ' + error.message)
     queryResult.value = null
   } finally {
     executing.value = false
@@ -146,13 +187,13 @@ const fetchNodes = async () => {
     const result = await getNodes(nodeLabel.value || null, nodeLimit.value)
     if (Array.isArray(result) && result.length > 0) {
       queryResult.value = result
-      ElMessage.success(t('query.found_nodes', { count: result.length }))
+      message.success(t('query.found_nodes', { count: result.length }))
     } else {
-      ElMessage.warning(t('query.no_nodes_found'))
+      message.warning(t('query.no_nodes_found'))
       queryResult.value = null
     }
   } catch (error) {
-    ElMessage.error(t('common.error'))
+    message.error(t('common.error') + ': ' + error.message)
     queryResult.value = null
   } finally {
     fetchingNodes.value = false
@@ -165,13 +206,13 @@ const fetchEdges = async () => {
     const result = await getEdges(relType.value || null, edgeLimit.value)
     if (Array.isArray(result) && result.length > 0) {
       queryResult.value = result
-      ElMessage.success(t('query.found_edges', { count: result.length }))
+      message.success(t('query.found_edges', { count: result.length }))
     } else {
-      ElMessage.warning(t('query.no_edges_found'))
+      message.warning(t('query.no_edges_found'))
       queryResult.value = null
     }
   } catch (error) {
-    ElMessage.error(t('common.error'))
+    message.error(t('common.error') + ': ' + error.message)
     queryResult.value = null
   } finally {
     fetchingEdges.value = false
@@ -181,24 +222,8 @@ const fetchEdges = async () => {
 
 <style lang="scss" scoped>
 .query {
-  .page-header {
-    margin-bottom: 20px;
-    h2 {
-      margin: 0;
-      font-size: 1.5rem;
-      font-weight: 600;
-    }
-  }
-
-  .json-view {
-    background: #f5f7fa;
-    padding: 1rem;
-    border-radius: 4px;
-    overflow-x: auto;
-    font-family: 'Courier New', monospace;
-    font-size: 0.875rem;
-    line-height: 1.5;
+  .query-result {
+    margin-top: 16px;
   }
 }
 </style>
-

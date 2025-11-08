@@ -1,35 +1,50 @@
 <template>
   <div class="graph">
-    <el-card shadow="never" class="page-header">
-      <h2>{{ t('graph.title') }}</h2>
-    </el-card>
+    <n-page-header :title="t('graph.title')" />
 
-    <el-card shadow="never">
-      <el-form :inline="true" style="margin-bottom: 20px">
-        <el-form-item :label="t('graph.node_limit')">
-          <el-input-number v-model="nodeLimit" :min="10" :max="1000" :step="10" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="loading" @click="loadGraph">
-            {{ t('graph.load_graph') }}
-          </el-button>
-        </el-form-item>
-      </el-form>
+    <n-card>
+      <n-space :size="16" style="margin-bottom: 20px">
+        <n-input-number
+          v-model:value="nodeLimit"
+          :min="10"
+          :max="1000"
+          :step="10"
+          style="width: 150px"
+        >
+          <template #prefix>
+            {{ t('graph.node_limit') }}:
+          </template>
+        </n-input-number>
+        
+        <n-button type="primary" :loading="loading" @click="loadGraph">
+          <template #icon>
+            <n-icon><refresh-outline /></n-icon>
+          </template>
+          {{ t('graph.load_graph') }}
+        </n-button>
+      </n-space>
 
-      <div v-if="graphData" class="graph-stats" style="margin-bottom: 20px">
-        <el-tag>{{ t('graph.nodes') }}: {{ graphData.nodes.length }}</el-tag>
-        <el-tag style="margin-left: 10px">{{ t('graph.edges') }}: {{ graphData.edges.length }}</el-tag>
+      <div v-if="graphData" style="margin-bottom: 20px">
+        <n-space :size="12">
+          <n-tag type="info" :bordered="false">
+            {{ t('graph.nodes') }}: {{ graphData.nodes.length }}
+          </n-tag>
+          <n-tag type="success" :bordered="false">
+            {{ t('graph.edges') }}: {{ graphData.edges.length }}
+          </n-tag>
+        </n-space>
       </div>
 
       <div ref="graphContainer" class="graph-container"></div>
-    </el-card>
+    </n-card>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { useMessage } from 'naive-ui'
+import { RefreshOutline } from '@vicons/ionicons5'
 import cytoscape from 'cytoscape'
 import dagre from 'cytoscape-dagre'
 import { getGraphData } from '@/api/services'
@@ -37,6 +52,7 @@ import { getGraphData } from '@/api/services'
 cytoscape.use(dagre)
 
 const { t } = useI18n()
+const message = useMessage()
 const nodeLimit = ref(100)
 const loading = ref(false)
 const graphContainer = ref(null)
@@ -49,7 +65,7 @@ const loadGraph = async () => {
     const result = await getGraphData(nodeLimit.value)
     
     if (!result) {
-      ElMessage.warning(t('graph.no_data'))
+      message.warning(t('graph.no_data'))
       return
     }
 
@@ -59,13 +75,10 @@ const loadGraph = async () => {
 
     // Handle different response formats
     if (result.nodes && result.edges) {
-      // Format: {nodes: [], edges: []}
       nodes = result.nodes
       edges = result.edges
     } else if (Array.isArray(result)) {
-      // Format: Array of query results
       result.forEach(item => {
-        // Extract nodes and edges from query result
         if (item.n) {
           const nodeId = item.n.id || item.n.properties?.id || String(item.n)
           if (nodeId && !nodeMap.has(nodeId)) {
@@ -116,15 +129,15 @@ const loadGraph = async () => {
     graphData.value = { nodes, edges }
 
     if (nodes.length === 0) {
-      ElMessage.warning(t('graph.no_nodes'))
+      message.warning(t('graph.no_nodes'))
       return
     }
 
     await nextTick()
     renderGraph()
-    ElMessage.success(t('graph.loaded', { nodes: nodes.length, edges: edges.length }))
+    message.success(t('graph.loaded', { nodes: nodes.length, edges: edges.length }))
   } catch (error) {
-    ElMessage.error(t('common.error'))
+    message.error(t('common.error'))
     console.error('Failed to load graph:', error)
   } finally {
     loading.value = false
@@ -134,7 +147,6 @@ const loadGraph = async () => {
 const renderGraph = () => {
   if (!graphContainer.value || !graphData.value) return
 
-  // Destroy existing instance
   if (cy) {
     cy.destroy()
   }
@@ -146,20 +158,20 @@ const renderGraph = () => {
       {
         selector: 'node',
         style: {
-          'background-color': '#0ea5e9',
+          'background-color': '#18a058',
           'label': 'data(label)',
           'width': 30,
           'height': 30,
           'text-valign': 'center',
           'text-halign': 'center',
           'font-size': '12px',
-          'font-family': 'Noto Serif SC, serif'
+          'font-family': 'Noto Serif SC, sans-serif'
         }
       },
       {
         selector: 'node.Concept',
         style: {
-          'background-color': '#0ea5e9'
+          'background-color': '#2080f0'
         }
       },
       {
@@ -171,7 +183,7 @@ const renderGraph = () => {
       {
         selector: 'node.Entity',
         style: {
-          'background-color': '#d4af37'
+          'background-color': '#f0a020'
         }
       },
       {
@@ -208,22 +220,12 @@ onUnmounted(() => {
 
 <style lang="scss" scoped>
 .graph {
-  .page-header {
-    margin-bottom: 20px;
-    h2 {
-      margin: 0;
-      font-size: 1.5rem;
-      font-weight: 600;
-    }
-  }
-
   .graph-container {
     width: 100%;
     height: 700px;
-    border: 1px solid #e4e7ed;
-    border-radius: 4px;
-    background: #f8fafc;
+    border: 1px solid #efeff5;
+    border-radius: 8px;
+    background: #fafafa;
   }
 }
 </style>
-
