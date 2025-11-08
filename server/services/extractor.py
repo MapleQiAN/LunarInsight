@@ -53,13 +53,25 @@ class TripletExtractor:
         Returns:
             List of Triplet objects
         """
+        print(f"\n{'='*80}")
+        print(f"🔍 [知识抽取] 开始处理文本块 (chunk_id: {chunk.chunk_id})")
+        print(f"📄 文本长度: {len(chunk.text)} 字符")
+        print(f"📝 文本预览: {chunk.text[:200]}...")
+        
         if not self.client or self.provider == "mock":
+            print(f"⚠️  [知识抽取] 使用 Mock 模式（未配置 AI 服务）")
             # Mock mode: return empty list or simple extraction
-            return self._mock_extract(chunk)
+            result = self._mock_extract(chunk)
+            print(f"📊 [知识抽取] Mock 模式提取结果: {len(result)} 个三元组")
+            return result
         
         prompt = self._build_prompt(chunk.text)
+        raw_content = None  # 初始化变量，用于错误处理
         
         try:
+            print(f"🤖 [AI请求] Provider: {self.provider}, Model: {self.model}")
+            print(f"📤 [AI请求] 发送请求到 AI 服务...")
+            
             # 根据provider调整参数
             completion_params = {
                 "model": self.model,
@@ -82,10 +94,24 @@ class TripletExtractor:
             
             response = self.client.chat.completions.create(**completion_params)
             
-            result = json.loads(response.choices[0].message.content)
-            triplets = result.get("triplets", [])
+            # 显示AI响应的原始内容
+            raw_content = response.choices[0].message.content
+            print(f"📥 [AI响应] 收到响应，长度: {len(raw_content)} 字符")
+            print(f"📥 [AI响应] 原始内容预览: {raw_content[:500]}...")
             
-            return [
+            # 解析JSON响应
+            result = json.loads(raw_content)
+            raw_triplets = result.get("triplets", [])
+            print(f"📊 [AI响应] 解析到原始三元组数量: {len(raw_triplets)}")
+            
+            # 显示原始三元组详情
+            for idx, t in enumerate(raw_triplets[:5], 1):  # 只显示前5个
+                print(f"   [{idx}] {t.get('subject', 'N/A')} - {t.get('predicate', 'N/A')} - {t.get('object', 'N/A')} (置信度: {t.get('confidence', 0)})")
+            if len(raw_triplets) > 5:
+                print(f"   ... 还有 {len(raw_triplets) - 5} 个三元组")
+            
+            # 过滤和转换三元组
+            triplets = [
                 Triplet(
                     subject=t.get("subject", ""),
                     predicate=t.get("predicate", ""),
@@ -101,11 +127,28 @@ class TripletExtractor:
                     doc_id=chunk.doc_id,
                     chunk_id=chunk.chunk_id
                 )
-                for t in triplets
+                for t in raw_triplets
                 if t.get("subject") and t.get("predicate") and t.get("object")
             ]
+            
+            # 显示过滤后的结果
+            filtered_count = len(raw_triplets) - len(triplets)
+            if filtered_count > 0:
+                print(f"⚠️  [过滤] 过滤掉 {filtered_count} 个无效三元组（缺少必要字段）")
+            
+            print(f"✅ [知识抽取] 成功提取 {len(triplets)} 个有效三元组")
+            print(f"{'='*80}\n")
+            
+            return triplets
+        except json.JSONDecodeError as e:
+            print(f"❌ [知识抽取] JSON 解析错误: {e}")
+            if raw_content:
+                print(f"📥 [AI响应] 原始响应内容: {raw_content[:1000]}")
+            return []
         except Exception as e:
-            print(f"Error extracting triplets: {e}")
+            print(f"❌ [知识抽取] 提取失败: {e}")
+            import traceback
+            print(f"📋 [错误详情] {traceback.format_exc()}")
             return []
     
     def _build_prompt(self, text: str) -> str:

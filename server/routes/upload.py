@@ -164,37 +164,70 @@ def process_document_background(doc_id: str, file_path: str, kind: str, job_id: 
     }
     
     try:
+        print(f"\n{'#'*80}")
+        print(f"🚀 [文档处理] 开始处理文档")
+        print(f"   - 文档ID: {doc_id}")
+        print(f"   - 文件路径: {file_path}")
+        print(f"   - 文件类型: {kind}")
+        print(f"   - 任务ID: {job_id}")
+        print(f"{'#'*80}\n")
+        
         # Step 1: Parse document
         processing_jobs[job_id]["message"] = "正在解析文档..."
         processing_jobs[job_id]["progress"] = 10
         
+        print(f"📖 [步骤1] 解析文档...")
         parser = ParserFactory.create_parser(kind)
         full_text, chunks = parser.parse(file_path)
+        print(f"✅ [步骤1] 解析完成: {len(chunks)} 个文本块，总长度 {len(full_text)} 字符")
         
         processing_jobs[job_id]["message"] = f"已提取 {len(chunks)} 个文本块，正在进行知识抽取..."
         processing_jobs[job_id]["progress"] = 30
         
         # Step 2: Extract triplets using AI
+        print(f"\n🤖 [步骤2] 开始知识抽取 (共 {len(chunks)} 个文本块)...")
         all_triplets = []
-        for i, chunk in enumerate(chunks):
+        chunk_triplet_counts = []
+        
+        for i, chunk in enumerate(chunks, 1):
+            print(f"\n📦 [文本块 {i}/{len(chunks)}] 处理中...")
             triplets = extractor.extract(chunk)
             all_triplets.extend(triplets)
-            processing_jobs[job_id]["progress"] = 30 + int((i + 1) / len(chunks) * 40)
+            chunk_triplet_counts.append(len(triplets))
+            processing_jobs[job_id]["progress"] = 30 + int((i / len(chunks)) * 40)
+            processing_jobs[job_id]["message"] = f"正在抽取知识... ({i}/{len(chunks)})"
+        
+        print(f"\n📊 [步骤2] 知识抽取完成:")
+        print(f"   - 总三元组数: {len(all_triplets)}")
+        print(f"   - 各文本块三元组数: {chunk_triplet_counts}")
+        print(f"   - 平均每个文本块: {len(all_triplets) / len(chunks) if chunks else 0:.2f} 个三元组")
         
         processing_jobs[job_id]["message"] = f"已抽取 {len(all_triplets)} 个知识三元组，正在链接实体..."
         processing_jobs[job_id]["progress"] = 70
         
         # Step 3: Link and merge entities
+        print(f"\n🔗 [步骤3] 开始实体链接和合并...")
         linked_triplets = linker.link_and_merge(all_triplets)
+        print(f"✅ [步骤3] 实体链接完成: {len(linked_triplets)} 个三元组")
         
         processing_jobs[job_id]["message"] = "正在构建知识图谱..."
         processing_jobs[job_id]["progress"] = 85
         
         # Step 4: Ingest into Neo4j
+        print(f"\n💾 [步骤4] 开始构建知识图谱...")
         graph_service.ingest_triplets(doc_id, linked_triplets)
+        print(f"✅ [步骤4] 知识图谱构建完成")
         
         # Get graph statistics
         concept_names = set(t.subject for t in linked_triplets) | set(t.object for t in linked_triplets)
+        
+        print(f"\n{'#'*80}")
+        print(f"🎉 [文档处理] 处理完成!")
+        print(f"   - 文本块数: {len(chunks)}")
+        print(f"   - 知识三元组数: {len(linked_triplets)}")
+        print(f"   - 概念数量: {len(concept_names)}")
+        print(f"   - 文本总长度: {len(full_text)} 字符")
+        print(f"{'#'*80}\n")
         
         processing_jobs[job_id]["status"] = "completed"
         processing_jobs[job_id]["progress"] = 100
@@ -207,11 +240,18 @@ def process_document_background(doc_id: str, file_path: str, kind: str, job_id: 
         }
         
     except Exception as e:
+        print(f"\n{'#'*80}")
+        print(f"❌ [文档处理] 处理失败!")
+        print(f"   - 错误信息: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"   - 错误详情:\n{error_trace}")
+        print(f"{'#'*80}\n")
+        
         processing_jobs[job_id]["status"] = "failed"
         processing_jobs[job_id]["message"] = f"处理失败: {str(e)}"
         processing_jobs[job_id]["progress"] = 0
-        import traceback
-        processing_jobs[job_id]["error"] = traceback.format_exc()
+        processing_jobs[job_id]["error"] = error_trace
 
 
 @router.post("/process", response_model=dict)

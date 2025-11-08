@@ -15,16 +15,27 @@ class GraphService:
             doc_id: Document ID
             triplets: List of triplets to ingest
         """
-        for triplet in triplets:
+        print(f"💾 [图谱构建] 开始将 {len(triplets)} 个三元组写入 Neo4j...")
+        
+        created_concepts = set()
+        created_relationships = 0
+        
+        for idx, triplet in enumerate(triplets, 1):
             # Ensure concepts exist
-            neo4j_client.create_concept(triplet.subject)
-            neo4j_client.create_concept(triplet.object)
+            if triplet.subject not in created_concepts:
+                neo4j_client.create_concept(triplet.subject)
+                created_concepts.add(triplet.subject)
+            
+            if triplet.object not in created_concepts:
+                neo4j_client.create_concept(triplet.object)
+                created_concepts.add(triplet.object)
             
             # Create relationship between concepts
+            rel_type = triplet.predicate.upper().replace(" ", "_")
             neo4j_client.create_relationship(
                 source_id=triplet.subject,
                 target_id=triplet.object,
-                rel_type=triplet.predicate.upper().replace(" ", "_"),
+                rel_type=rel_type,
                 properties={
                     "confidence": triplet.confidence,
                     "evidence": triplet.evidence,
@@ -32,6 +43,11 @@ class GraphService:
                     "chunk_id": triplet.chunk_id
                 }
             )
+            created_relationships += 1
+            
+            # 显示前5个三元组的详细信息
+            if idx <= 5:
+                print(f"   [{idx}] {triplet.subject} --[{rel_type}]--> {triplet.object} (置信度: {triplet.confidence:.2f})")
             
             # Link document to concepts
             if doc_id:
@@ -50,4 +66,11 @@ class GraphService:
                     offset=triplet.evidence.get("offset"),
                     evidence=triplet.evidence.get("text", "")[:500]
                 )
+        
+        if len(triplets) > 5:
+            print(f"   ... 还有 {len(triplets) - 5} 个三元组")
+        
+        print(f"✅ [图谱构建] 完成:")
+        print(f"   - 创建/更新概念数: {len(created_concepts)}")
+        print(f"   - 创建关系数: {created_relationships}")
 

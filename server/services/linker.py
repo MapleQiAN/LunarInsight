@@ -24,22 +24,64 @@ class EntityLinker:
         Returns:
             List of triplets with linked entities
         """
-        linked_triplets = []
+        print(f"\n{'='*80}")
+        print(f"🔗 [实体链接] 开始处理 {len(triplets)} 个三元组")
         
-        for triplet in triplets:
+        linked_triplets = []
+        link_stats = {
+            "exact_match": 0,
+            "fuzzy_match": 0,
+            "translation_match": 0,
+            "new_concept": 0,
+            "cached": 0,
+            "normalized": 0
+        }
+        
+        for idx, triplet in enumerate(triplets, 1):
+            original_subject = triplet.subject
+            original_object = triplet.object
+            
             # Normalize subject and object
             subject_normalized = self._normalize_entity(triplet.subject)
             object_normalized = self._normalize_entity(triplet.object)
             
+            if subject_normalized != original_subject or object_normalized != original_object:
+                link_stats["normalized"] += 1
+                if idx <= 5:  # 只显示前5个的详细信息
+                    print(f"📝 [{idx}] 规范化: '{original_subject}' → '{subject_normalized}', '{original_object}' → '{object_normalized}'")
+            
             # Find canonical names (merge with existing concepts)
-            subject_canonical = self._find_or_merge_concept(subject_normalized)
-            object_canonical = self._find_or_merge_concept(object_normalized)
+            subject_canonical, subject_match_type = self._find_or_merge_concept(subject_normalized)
+            object_canonical, object_match_type = self._find_or_merge_concept(object_normalized)
+            
+            # 统计匹配类型
+            if subject_match_type in link_stats:
+                link_stats[subject_match_type] += 1
+            if object_match_type in link_stats:
+                link_stats[object_match_type] += 1
             
             # Update triplet with canonical names
             triplet.subject = subject_canonical
             triplet.object = object_canonical
             
+            # 显示链接结果（前5个）
+            if idx <= 5:
+                if subject_canonical != subject_normalized:
+                    print(f"   🔗 主体链接: '{subject_normalized}' → '{subject_canonical}' ({subject_match_type})")
+                if object_canonical != object_normalized:
+                    print(f"   🔗 客体链接: '{object_normalized}' → '{object_canonical}' ({object_match_type})")
+            
             linked_triplets.append(triplet)
+        
+        # 显示统计信息
+        print(f"\n📊 [实体链接] 统计信息:")
+        print(f"   - 精确匹配: {link_stats['exact_match']} 次")
+        print(f"   - 模糊匹配: {link_stats['fuzzy_match']} 次")
+        print(f"   - 翻译匹配: {link_stats['translation_match']} 次")
+        print(f"   - 新建概念: {link_stats['new_concept']} 次")
+        print(f"   - 规范化处理: {link_stats['normalized']} 次")
+        print(f"✅ [实体链接] 完成，处理了 {len(linked_triplets)} 个三元组")
+        print(f"{'='*80}\n")
         
         return linked_triplets
     
@@ -65,10 +107,10 @@ class EntityLinker:
         
         return normalized
     
-    def _find_or_merge_concept(self, name: str) -> str:
+    def _find_or_merge_concept(self, name: str) -> tuple[str, str]:
         """
         Intelligently find existing concept or merge with similar ones.
-        Returns canonical name for graph insertion.
+        Returns (canonical_name, match_type) for graph insertion.
         
         Fusion strategy:
         1. Exact match (case-insensitive) → use existing
@@ -77,17 +119,18 @@ class EntityLinker:
         4. No match → create new concept
         """
         if not name:
-            return name
+            return name, "exact_match"
         
         # Check cache first
         if name in self.concept_cache:
-            return self.concept_cache[name].get('canonical_name', name)
+            cached = self.concept_cache[name]
+            return cached.get('canonical_name', name), "cached"
         
         # 1. Exact match (case-insensitive)
         existing = neo4j_client.find_concept_by_name(name)
         if existing:
             self.concept_cache[name] = existing['c']
-            return name
+            return name, "exact_match"
         
         # 2. Find similar concepts for fuzzy matching
         similar_concepts = neo4j_client.find_similar_concepts(name, threshold=0.7)
@@ -106,8 +149,7 @@ class EntityLinker:
                 neo4j_client.add_concept_alias(canonical, name)
                 
                 self.concept_cache[name] = best_match['c']
-                print(f"🔗 链接: '{name}' → '{canonical}'")
-                return canonical
+                return canonical, "fuzzy_match"
         
         # 3. Check for potential translation matches (bilingual support)
         translation_match = self._find_translation_match(name)
@@ -115,14 +157,12 @@ class EntityLinker:
             canonical = translation_match['name']
             self.alias_dict[name.lower()] = canonical
             neo4j_client.add_concept_alias(canonical, name)
-            print(f"🌐 翻译链接: '{name}' → '{canonical}'")
-            return canonical
+            return canonical, "translation_match"
         
         # 4. No match found - create new concept
         neo4j_client.create_concept(name)
         self.concept_cache[name] = {'name': name}
-        print(f"✨ 新概念: '{name}'")
-        return name
+        return name, "new_concept"
     
     def _select_best_match(self, name: str, candidates: List[Dict]) -> Optional[Dict]:
         """
