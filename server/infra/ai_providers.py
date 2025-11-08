@@ -172,9 +172,20 @@ class OpenAICompatibleClient(BaseAIClient):
     
     def __init__(self, api_key: str, model: str, base_url: str):
         super().__init__(model)
+        # 规范化 base_url：移除末尾斜杠（除非是 Google 的特殊情况）
+        normalized_base_url = base_url.rstrip('/') if not base_url.endswith('/openai/') else base_url
+        
+        # 验证 base_url 格式
+        if not normalized_base_url.startswith(('http://', 'https://')):
+            raise ValueError(f"Invalid base_url format: {base_url}. Must start with http:// or https://")
+        
+        print(f"🔗 [AI客户端] 初始化 OpenAI 兼容客户端")
+        print(f"   Model: {model}")
+        print(f"   Base URL: {normalized_base_url}")
+        
         self.client = OpenAI(
             api_key=api_key,
-            base_url=base_url
+            base_url=normalized_base_url
         )
     
     def chat_completion(
@@ -188,13 +199,35 @@ class OpenAICompatibleClient(BaseAIClient):
         if extra_params.get("json_mode"):
             params["response_format"] = {"type": "json_object"}
         
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            **params
-        )
-        return response.choices[0].message.content
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                **params
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            # 提供更详细的错误信息
+            error_msg = str(e)
+            error_type = type(e).__name__
+            
+            # 获取实际的 base_url（从客户端对象）
+            actual_base_url = getattr(self.client, 'base_url', 'unknown')
+            
+            if "404" in error_msg or "not found" in error_msg.lower() or error_type == "NotFoundError":
+                raise ValueError(
+                    f"API endpoint not found (404). "
+                    f"Please check your base_url configuration. "
+                    f"Current base_url: {actual_base_url}, "
+                    f"Model: {self.model}. "
+                    f"This usually means:\n"
+                    f"  1. The base_url is incorrect or incomplete\n"
+                    f"  2. The API endpoint path is wrong\n"
+                    f"  3. The service is not available at the specified URL\n"
+                    f"Original error: {error_msg}"
+                ) from e
+            raise
 
 
 class MockClient(BaseAIClient):
@@ -227,15 +260,16 @@ class AIProviderFactory:
     """Factory for creating AI clients."""
     
     # 默认的 base_url 配置
+    # 注意：base_url 不应以斜杠结尾（除了 Google 的特殊情况）
     DEFAULT_BASE_URLS = {
         "openai": None,  # 使用默认
         "anthropic": None,
-        "google": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "google": "https://generativelanguage.googleapis.com/v1beta/openai/",  # Google 需要末尾斜杠
         "deepseek": "https://api.deepseek.com/v1",
         "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "glm": "https://open.bigmodel.cn/api/paas/v4",
         "moonshot": "https://api.moonshot.cn/v1",
-        "ernie": "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop",
+        "ernie": "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop",  # 文心一言 API
         "minimax": "https://api.minimax.chat/v1",
         "doubao": "https://ark.cn-beijing.volces.com/api/v3",
         "ollama": "http://localhost:11434/v1"
