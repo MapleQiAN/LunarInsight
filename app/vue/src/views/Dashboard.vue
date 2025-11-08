@@ -13,11 +13,11 @@
           </template>
           刷新数据
         </n-button>
-        <n-button @click="$router.push('/upload')">
+        <n-button @click="$router.push('/knowledge')">
           <template #icon>
             <n-icon><cloud-upload-outline /></n-icon>
           </template>
-          上传文档
+          知识构建
         </n-button>
       </div>
     </div>
@@ -25,7 +25,7 @@
     <!-- Statistics Cards -->
     <div class="stats-grid">
       <div class="stat-card" :style="{ '--card-color': '#d4af37' }">
-        <div class="stat-icon">
+        <div class="stat-icon" style="background: linear-gradient(135deg, #d4af37, #c9a668);">
           <n-icon size="32"><document-text-outline /></n-icon>
         </div>
         <div class="stat-content">
@@ -40,7 +40,7 @@
       </div>
 
       <div class="stat-card" :style="{ '--card-color': '#c9a668' }">
-        <div class="stat-icon">
+        <div class="stat-icon" style="background: linear-gradient(135deg, #c9a668, #b8860b);">
           <n-icon size="32"><bulb-outline /></n-icon>
         </div>
         <div class="stat-content">
@@ -55,7 +55,7 @@
       </div>
 
       <div class="stat-card" :style="{ '--card-color': '#b8860b' }">
-        <div class="stat-icon">
+        <div class="stat-icon" style="background: linear-gradient(135deg, #b8860b, #9a7509);">
           <n-icon size="32"><git-network-outline /></n-icon>
         </div>
         <div class="stat-content">
@@ -70,7 +70,7 @@
       </div>
 
       <div class="stat-card" :style="{ '--card-color': '#daa520' }">
-        <div class="stat-icon">
+        <div class="stat-icon" style="background: linear-gradient(135deg, #daa520, #c9a668);">
           <n-icon size="32"><analytics-outline /></n-icon>
         </div>
         <div class="stat-content">
@@ -139,13 +139,13 @@
           <h3>快速操作</h3>
         </div>
         <div class="quick-actions">
-          <div class="action-card" @click="$router.push('/upload')">
+          <div class="action-card" @click="$router.push('/knowledge')">
             <div class="action-icon" style="background: linear-gradient(135deg, #d4af37, #b8860b);">
               <n-icon size="28"><cloud-upload-outline /></n-icon>
             </div>
             <div class="action-content">
-              <div class="action-title">上传文档</div>
-              <div class="action-desc">导入 PDF/Markdown 文档</div>
+              <div class="action-title">知识构建</div>
+              <div class="action-desc">导入文档/文本构建知识</div>
             </div>
             <n-icon class="action-arrow" size="16"><arrow-forward-outline /></n-icon>
           </div>
@@ -209,28 +209,48 @@
       </div>
       <div class="status-grid">
         <div class="status-item">
-          <div class="status-label">Neo4j 图数据库</div>
-          <n-tag :type="systemStatus.neo4j ? 'success' : 'error'" :bordered="false">
-            {{ systemStatus.neo4j ? '运行中' : '离线' }}
-          </n-tag>
+          <div class="status-icon" style="background: linear-gradient(135deg, #52c41a, #389e0d);">
+            <n-icon size="24"><server-outline /></n-icon>
+          </div>
+          <div class="status-content">
+            <div class="status-label">Neo4j 图数据库</div>
+            <n-tag :type="systemStatus.neo4j ? 'success' : 'error'" :bordered="false">
+              {{ systemStatus.neo4j ? '运行中' : '离线' }}
+            </n-tag>
+          </div>
         </div>
         <div class="status-item">
-          <div class="status-label">Redis 队列</div>
-          <n-tag :type="systemStatus.redis ? 'success' : 'warning'" :bordered="false">
-            {{ systemStatus.redis ? '运行中' : '未配置' }}
-          </n-tag>
+          <div class="status-icon" style="background: linear-gradient(135deg, #ff7875, #ff4d4f);">
+            <n-icon size="24"><layers-outline /></n-icon>
+          </div>
+          <div class="status-content">
+            <div class="status-label">Redis 队列</div>
+            <n-tag :type="systemStatus.redis ? 'success' : 'warning'" :bordered="false">
+              {{ systemStatus.redis ? '运行中' : '未配置' }}
+            </n-tag>
+          </div>
         </div>
         <div class="status-item">
-          <div class="status-label">向量检索</div>
-          <n-tag type="info" :bordered="false">
-            {{ systemStatus.vector }}
-          </n-tag>
+          <div class="status-icon" style="background: linear-gradient(135deg, #40a9ff, #1890ff);">
+            <n-icon size="24"><cube-outline /></n-icon>
+          </div>
+          <div class="status-content">
+            <div class="status-label">向量检索</div>
+            <n-tag type="info" :bordered="false">
+              {{ systemStatus.vector }}
+            </n-tag>
+          </div>
         </div>
         <div class="status-item">
-          <div class="status-label">LLM 服务</div>
-          <n-tag :type="systemStatus.llm ? 'success' : 'warning'" :bordered="false">
-            {{ systemStatus.llm ? '已配置' : 'Mock模式' }}
-          </n-tag>
+          <div class="status-icon" style="background: linear-gradient(135deg, #b37feb, #9254de);">
+            <n-icon size="24"><sparkles-outline /></n-icon>
+          </div>
+          <div class="status-content">
+            <div class="status-label">LLM 服务</div>
+            <n-tag :type="systemStatus.llm ? 'success' : 'warning'" :bordered="false">
+              {{ systemStatus.llm ? '已配置' : 'Mock模式' }}
+            </n-tag>
+          </div>
         </div>
       </div>
     </div>
@@ -266,7 +286,10 @@ import {
   SearchOutline,
   ChatbubbleEllipsesOutline,
   TimeOutline,
-  ServerOutline
+  ServerOutline,
+  LayersOutline,
+  CubeOutline,
+  SparklesOutline
 } from '@vicons/ionicons5'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -659,7 +682,6 @@ onMounted(() => {
     width: 64px;
     height: 64px;
     border-radius: 16px;
-    background: linear-gradient(135deg, var(--card-color), rgba(var(--card-color), 0.7));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -929,22 +951,46 @@ onMounted(() => {
   gap: 16px;
 
   .status-item {
-    padding: 16px;
-    background: #fafafa;
+    padding: 20px;
+    background: white;
     border-radius: 12px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 16px;
     transition: all 0.3s ease;
+    border: 2px solid transparent;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 
     &:hover {
-      background: linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(184, 134, 11, 0.1));
+      border-color: rgba(212, 175, 55, 0.3);
+      box-shadow: 0 4px 16px rgba(212, 175, 55, 0.2);
+      transform: translateY(-2px);
     }
 
-    .status-label {
-      font-size: 14px;
-      font-weight: 500;
-      color: #666;
+    .status-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .status-content {
+      flex: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-width: 0;
+
+      .status-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+      }
     }
   }
 }
