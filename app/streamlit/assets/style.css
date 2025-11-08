@@ -1,0 +1,327 @@
+/* LunarInsight 中国风主题样式 */
+
+/* 导入思源宋体字体 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@200;300;400;500;600;700;900&display=swap');
+
+/* 全局样式 */
+* {
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+}
+
+/* 主容器样式 */
+.main {
+    background: linear-gradient(135deg, #f5f1e8 0%, #e8e0d3 100%);
+    padding: 2rem;
+}
+
+/* 标题样式 - 中国风 */
+h1, h2, h3 {
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+    font-weight: 600;
+    color: #8B4513;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+    letter-spacing: 0.05em;
+}
+
+h1 {
+    font-size: 2.5rem;
+    border-bottom: 3px solid #C9A961;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+}
+
+h1::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 0;
+    width: 100px;
+    height: 3px;
+    background: linear-gradient(90deg, #C9A961, #D4AF37);
+}
+
+h2 {
+    font-size: 1.8rem;
+    color: #6B4423;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+}
+
+h3 {
+    font-size: 1.4rem;
+    color: #8B4513;
+}
+
+/* 段落和文本样式 */
+p, div, span, label {
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+    color: #3D2817;
+    line-height: 1.8;
+}
+
+/* 侧边栏样式 */
+.css-1d391kg {
+    background: linear-gradient(180deg, #2C1810 0%, #3D2817 100%);
+    border-right: 2px solid #C9A961;
+}
+
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #2C1810 0%, #3D2817 100%);
+}
+
+[data-testid="stSidebar"] * {
+    color: #F5E6D3 !important;
+}
+
+[data-testid="stSidebar"] .stSelectbox label,
+[data-testid="stSidebar"] .stButton button {
+    color: #F5E6D3 !important;
+}
+
+/* 按钮样式 - 中国风 */
+.stButton > button {
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+    background: linear-gradient(135deg, #C9A961 0%, #D4AF37 100%);
+    color: #2C1810 !important;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.5rem;
+    font-weight: 500;
+    font-size: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    border: 2px solid #B8945F;
+}
+
+.stButton > button:hover {
+    background: linear-gradient(135deg, #D4AF37 0%, #E5C158 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 输入框样式 */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea,
+.stSelectbox > div > div > select {
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+    border: 2px solid #C9A961;
+    border-radius: 6px;
+    padding: 0.5rem;
+    background: #FFFBF5;
+    color: #3D2817;
+}
+
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus {
+    border-color: #D4AF37;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
+}
+
+/* 文件上传器样式 */
+.stFileUploader {
+    border: 2px dashed #C9A961;
+    border-radius: 12px;
+    padding: 2rem;
+    background: #FFFBF5;
+    transition: all 0.3s ease;
+}
+
+.stFileUploader:hover {
+    border-color: #D4AF37;
+    background: #FFF9F0;
+}
+
+/* 卡片和信息框样式 */
+.stAlert {
+    border-radius: 8px;
+    border-left: 4px solid #C9A961;
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+}
+
+.stSuccess {
+    background: #F0F8E8;
+    border-left-color: #8FBC8F;
+    color: #2F4F2F;
+}
+
+.stInfo {
+    background: #E8F4F8;
+    border-left-color: #5F9EA0;
+    color: #2F4F4F;
+}
+
+.stWarning {
+    background: #FFF8E1;
+    border-left-color: #FFB347;
+    color: #8B4513;
+}
+
+.stError {
+    background: #FFE8E8;
+    border-left-color: #CD5C5C;
+    color: #8B0000;
+}
+
+/* 指标卡片样式 */
+[data-testid="stMetricValue"] {
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+    font-weight: 600;
+    color: #8B4513;
+    font-size: 2rem;
+}
+
+[data-testid="stMetricLabel"] {
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+    color: #6B4423;
+    font-size: 1rem;
+}
+
+/* 表格样式 */
+.stDataFrame {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* JSON 显示样式 */
+.stJson {
+    background: #2C1810;
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid #C9A961;
+}
+
+/* 进度条样式 */
+.stProgress > div > div > div {
+    background: linear-gradient(90deg, #C9A961, #D4AF37);
+}
+
+/* 选择框样式 */
+.stSelectbox label {
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+    color: #3D2817;
+    font-weight: 500;
+}
+
+/* 分隔线装饰 */
+hr {
+    border: none;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #C9A961, transparent);
+    margin: 2rem 0;
+}
+
+/* 引用样式 */
+blockquote {
+    border-left: 4px solid #C9A961;
+    padding-left: 1.5rem;
+    margin: 1.5rem 0;
+    font-style: italic;
+    color: #6B4423;
+    background: #FFFBF5;
+    padding: 1rem 1.5rem;
+    border-radius: 4px;
+}
+
+/* 加载动画样式 */
+.stSpinner > div {
+    border-color: #C9A961 transparent transparent transparent;
+}
+
+/* 标签页样式 */
+.stTabs [data-baseweb="tab-list"] {
+    background: #FFFBF5;
+    border-bottom: 2px solid #C9A961;
+}
+
+.stTabs [data-baseweb="tab"] {
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', '思源宋体', serif !important;
+    color: #6B4423;
+    font-weight: 500;
+}
+
+.stTabs [aria-selected="true"] {
+    color: #C9A961;
+    border-bottom: 3px solid #C9A961;
+}
+
+/* 列布局间距 */
+[data-testid="column"] {
+    padding: 0.5rem;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2rem;
+    }
+    
+    h2 {
+        font-size: 1.5rem;
+    }
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #F5F1E8;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #C9A961;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #D4AF37;
+}
+
+/* 装饰性元素 */
+.decorative-line {
+    height: 1px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        #C9A961 20%, 
+        #D4AF37 50%, 
+        #C9A961 80%, 
+        transparent 100%);
+    margin: 1.5rem 0;
+}
+
+/* 卡片容器 */
+.card-container {
+    background: #FFFBF5;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border: 1px solid #E8E0D3;
+}
+
+/* 中国风装饰边框 */
+.chinese-border {
+    border: 2px solid #C9A961;
+    border-radius: 8px;
+    padding: 1rem;
+    background: linear-gradient(135deg, #FFFBF5 0%, #F5F1E8 100%);
+    position: relative;
+}
+
+.chinese-border::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #C9A961, #D4AF37, #C9A961);
+    border-radius: 8px;
+    z-index: -1;
+    opacity: 0.3;
+}
+
