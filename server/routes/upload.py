@@ -225,7 +225,8 @@ def process_document_background(
     chunk_size: int = 2000,
     enable_ai_segmentation: bool = False,
     user_prompt: Optional[str] = None,
-    optimize_prompt: bool = True
+    optimize_prompt: bool = True,
+    root_topic: Optional[str] = None
 ):
     """
     Background task for processing document into knowledge graph.
@@ -330,7 +331,7 @@ def process_document_background(
             _update_upload_status(job_id, "processing", 75, "正在构建丰富概念...", documentId=doc_id)
             
             print(f"\n💎 [概念构建] 写入丰富概念信息...")
-            graph_service.ingest_rich_concepts(doc_id, all_concepts)
+            graph_service.ingest_rich_concepts(doc_id, all_concepts, root_topic=root_topic)
             
             # Step 5: Link and merge entities
             _update_upload_status(job_id, "processing", 80, "正在链接实体...", documentId=doc_id)
@@ -343,7 +344,7 @@ def process_document_background(
             _update_upload_status(job_id, "processing", 90, "正在构建知识图谱...", documentId=doc_id)
             
             print(f"\n💾 [图谱构建] 开始构建知识图谱...")
-            graph_service.ingest_triplets(doc_id, linked_triplets)
+            graph_service.ingest_triplets(doc_id, linked_triplets, root_topic=root_topic)
             print(f"✅ [图谱构建] 完成")
             
             # Get statistics
@@ -409,7 +410,7 @@ def process_document_background(
             
             # Step 4: Ingest into Neo4j
             print(f"\n💾 [步骤4] 开始构建知识图谱...")
-            graph_service.ingest_triplets(doc_id, linked_triplets)
+            graph_service.ingest_triplets(doc_id, linked_triplets, root_topic=root_topic)
             print(f"✅ [步骤4] 知识图谱构建完成")
             
             # Get graph statistics
@@ -452,7 +453,8 @@ async def upload_and_process(
     chunk_size: int = 2000,
     enable_ai_segmentation: bool = False,
     user_prompt: Optional[str] = None,
-    optimize_prompt: bool = True
+    optimize_prompt: bool = True,
+    root_topic: Optional[str] = None
 ):
     """
     一体化接口：上传文件并自动进行知识抽取和图谱构建。
@@ -464,6 +466,7 @@ async def upload_and_process(
         enable_ai_segmentation: 启用AI智能分词（默认 False）
         user_prompt: 用户自定义分析提示词（可选）
         optimize_prompt: 是否用AI优化用户提示词（默认 True）
+        root_topic: 主题根节点名称（可选），如果提供，文件内容将链接到此主题而不是文档
         
     Returns:
         {
@@ -560,6 +563,7 @@ async def upload_and_process(
                 enable_ai_segmentation,
                 user_prompt,
                 optimize_prompt,
+                root_topic,
                 job_timeout='1h'
             )
             
@@ -589,7 +593,8 @@ async def upload_and_process(
             chunk_size,
             enable_ai_segmentation,
             user_prompt,
-            optimize_prompt
+            optimize_prompt,
+            root_topic
         )
         
         response["status"] = "processing"
@@ -636,6 +641,7 @@ class TextUploadRequest(BaseModel):
     enable_ai_segmentation: bool = False
     user_prompt: Optional[str] = None
     optimize_prompt: bool = True
+    root_topic: Optional[str] = None
 
 
 class URLUploadRequest(BaseModel):
@@ -647,6 +653,7 @@ class URLUploadRequest(BaseModel):
     enable_ai_segmentation: bool = False
     user_prompt: Optional[str] = None
     optimize_prompt: bool = True
+    root_topic: Optional[str] = None
 
 
 @router.post("/text", response_model=dict)
@@ -757,6 +764,7 @@ async def upload_text(
                 request.enable_ai_segmentation,
                 request.user_prompt,
                 request.optimize_prompt,
+                request.root_topic,
                 job_timeout='1h'
             )
             
@@ -786,7 +794,8 @@ async def upload_text(
             chunk_size,
             request.enable_ai_segmentation,
             request.user_prompt,
-            request.optimize_prompt
+            request.optimize_prompt,
+            request.root_topic
         )
         
         response["status"] = "processing"
@@ -954,6 +963,7 @@ async def upload_url(
                 request.enable_ai_segmentation,
                 request.user_prompt,
                 request.optimize_prompt,
+                request.root_topic,
                 job_timeout='1h'
             )
             
@@ -983,7 +993,8 @@ async def upload_url(
             chunk_size,
             request.enable_ai_segmentation,
             request.user_prompt,
-            request.optimize_prompt
+            request.optimize_prompt,
+            request.root_topic
         )
         
         response["status"] = "processing"

@@ -1,5 +1,5 @@
 """Graph service for ingesting triplets into Neo4j."""
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from models.document import Triplet
 from infra.neo4j_client import neo4j_client
 
@@ -7,15 +7,23 @@ from infra.neo4j_client import neo4j_client
 class GraphService:
     """Service for graph operations."""
     
-    def ingest_triplets(self, doc_id: str, triplets: List[Triplet]):
+    def ingest_triplets(self, doc_id: str, triplets: List[Triplet], root_topic: Optional[str] = None):
         """
         Ingest triplets into Neo4j graph.
         
         Args:
             doc_id: Document ID
             triplets: List of triplets to ingest
+            root_topic: Optional root topic name. If provided, concepts will be linked to topic instead of document.
         """
         print(f"💾 [图谱构建] 开始将 {len(triplets)} 个三元组写入 Neo4j...")
+        if root_topic:
+            print(f"   📌 主题根节点: {root_topic}")
+        
+        # Create or get topic root node if provided
+        if root_topic:
+            neo4j_client.create_or_get_topic(root_topic)
+            neo4j_client.link_document_to_topic(doc_id, root_topic)
         
         created_concepts = set()
         created_relationships = 0
@@ -49,8 +57,28 @@ class GraphService:
             if idx <= 5:
                 print(f"   [{idx}] {triplet.subject} --[{rel_type}]--> {triplet.object} (置信度: {triplet.confidence:.2f})")
             
-            # Link document to concepts
-            if doc_id:
+            # Link concepts to topic root node (if provided) or document (fallback)
+            if root_topic:
+                # Link to topic root node
+                neo4j_client.link_concept_to_topic(
+                    concept_name=triplet.subject,
+                    topic_name=root_topic,
+                    page=triplet.evidence.get("page"),
+                    offset=triplet.evidence.get("offset"),
+                    evidence=triplet.evidence.get("text", "")[:500],
+                    doc_id=doc_id
+                )
+                
+                neo4j_client.link_concept_to_topic(
+                    concept_name=triplet.object,
+                    topic_name=root_topic,
+                    page=triplet.evidence.get("page"),
+                    offset=triplet.evidence.get("offset"),
+                    evidence=triplet.evidence.get("text", "")[:500],
+                    doc_id=doc_id
+                )
+            elif doc_id:
+                # Fallback: link to document (backward compatibility)
                 neo4j_client.link_concept_to_document(
                     concept_name=triplet.subject,
                     doc_id=doc_id,
@@ -74,15 +102,23 @@ class GraphService:
         print(f"   - 创建/更新概念数: {len(created_concepts)}")
         print(f"   - 创建关系数: {created_relationships}")
     
-    def ingest_rich_concepts(self, doc_id: str, concepts: List[Dict[str, Any]]):
+    def ingest_rich_concepts(self, doc_id: str, concepts: List[Dict[str, Any]], root_topic: Optional[str] = None):
         """
         将AI提取的丰富概念信息写入Neo4j。
         
         Args:
             doc_id: 文档ID
             concepts: 概念列表，包含详细属性
+            root_topic: Optional root topic name. If provided, concepts will be linked to topic instead of document.
         """
         print(f"💎 [丰富概念] 开始写入 {len(concepts)} 个增强概念...")
+        if root_topic:
+            print(f"   📌 主题根节点: {root_topic}")
+        
+        # Create or get topic root node if provided
+        if root_topic:
+            neo4j_client.create_or_get_topic(root_topic)
+            neo4j_client.link_document_to_topic(doc_id, root_topic)
         
         for idx, concept in enumerate(concepts, 1):
             name = concept.get("name", "")
@@ -127,8 +163,15 @@ class GraphService:
                         {"name": name, "alias": alias}
                     )
             
-            # 链接到文档
-            if doc_id:
+            # Link to topic root node (if provided) or document (fallback)
+            if root_topic:
+                neo4j_client.link_concept_to_topic(
+                    concept_name=name,
+                    topic_name=root_topic,
+                    doc_id=doc_id
+                )
+            elif doc_id:
+                # Fallback: link to document (backward compatibility)
                 neo4j_client.link_concept_to_document(
                     concept_name=name,
                     doc_id=doc_id

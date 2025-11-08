@@ -66,6 +66,24 @@
                   </n-button>
                 </div>
 
+                <!-- 主题根节点配置 -->
+                <n-form-item label="主题根节点（可选）" style="margin-top: 16px;">
+                  <n-input
+                    v-model:value="rootTopic"
+                    placeholder="例如：机器学习、Web开发、算法等，留空则自动识别"
+                    :maxlength="100"
+                    show-count
+                    clearable
+                  >
+                    <template #prefix>
+                      <n-icon :component="SparklesOutline" />
+                    </template>
+                  </n-input>
+                  <template #feedback>
+                    <span style="font-size: 12px; color: #999;">指定文档的主要主题，有助于更好地组织知识图谱</span>
+                  </template>
+                </n-form-item>
+
                 <!-- AI 配置选项 -->
                 <div class="ai-config-section">
                   <n-collapse>
@@ -131,6 +149,22 @@
                     :maxlength="100"
                     show-count
                   />
+                </n-form-item>
+                <n-form-item label="主题根节点（可选）">
+                  <n-input
+                    v-model:value="rootTopic"
+                    placeholder="例如：机器学习、Web开发、算法等，留空则自动识别"
+                    :maxlength="100"
+                    show-count
+                    clearable
+                  >
+                    <template #prefix>
+                      <n-icon :component="SparklesOutline" />
+                    </template>
+                  </n-input>
+                  <template #feedback>
+                    <span style="font-size: 12px; color: #999;">指定文档的主要主题，有助于更好地组织知识图谱</span>
+                  </template>
                 </n-form-item>
                 <n-form-item label="文本内容">
                   <n-input
@@ -220,6 +254,22 @@
                     :maxlength="100"
                     show-count
                   />
+                </n-form-item>
+                <n-form-item label="主题根节点（可选）">
+                  <n-input
+                    v-model:value="rootTopic"
+                    placeholder="例如：机器学习、Web开发、算法等，留空则自动识别"
+                    :maxlength="100"
+                    show-count
+                    clearable
+                  >
+                    <template #prefix>
+                      <n-icon :component="SparklesOutline" />
+                    </template>
+                  </n-input>
+                  <template #feedback>
+                    <span style="font-size: 12px; color: #999;">指定文档的主要主题，有助于更好地组织知识图谱</span>
+                  </template>
                 </n-form-item>
                 <n-alert type="info" style="margin-bottom: 16px">
                   系统将自动抓取网页内容并提取文本，支持大部分公开网页
@@ -469,6 +519,9 @@ const textTitle = ref('')
 const urlInput = ref('')
 const urlTitle = ref('')
 
+// Topic root state
+const rootTopic = ref('')
+
 // AI configuration state
 const enableAI = ref(false)
 const userPrompt = ref('')
@@ -584,7 +637,12 @@ const handleUpload = async () => {
       optimizePrompt: optimizePrompt.value
     } : undefined
     
-    const result = await uploadFile(selectedFile.value, aiOptions)
+    const options = {
+      ...aiOptions,
+      rootTopic: rootTopic.value || undefined
+    }
+    
+    const result = await uploadFile(selectedFile.value, options)
     uploadResult.value = result
     
     if (result.status === 'duplicate') {
@@ -644,11 +702,16 @@ const handleTextUpload = async () => {
       optimizePrompt: optimizePrompt.value
     } : undefined
     
+    const options = {
+      ...aiOptions,
+      rootTopic: rootTopic.value || undefined
+    }
+    
     const result = await uploadText(
       textContent.value,
       textTitle.value || undefined,
       true, // auto_process
-      aiOptions
+      options
     )
     
     uploadResult.value = result
@@ -681,6 +744,7 @@ const handleTextUpload = async () => {
     // Clear form
     textContent.value = ''
     textTitle.value = ''
+    rootTopic.value = ''
   } catch (error) {
     console.error('Text upload failed:', error)
     message.error(error.message || '文本提交失败')
@@ -705,11 +769,16 @@ const handleUrlUpload = async () => {
       optimizePrompt: optimizePrompt.value
     } : undefined
     
+    const options = {
+      ...aiOptions,
+      rootTopic: rootTopic.value || undefined
+    }
+    
     const result = await uploadUrl(
       urlInput.value,
       urlTitle.value || undefined,
       true, // auto_process
-      aiOptions
+      options
     )
     
     uploadResult.value = result
@@ -742,6 +811,7 @@ const handleUrlUpload = async () => {
     // Clear form
     urlInput.value = ''
     urlTitle.value = ''
+    rootTopic.value = ''
   } catch (error) {
     console.error('URL upload failed:', error)
     message.error(error.message || '网页抓取失败')
@@ -755,6 +825,7 @@ const resetUpload = () => {
   textTitle.value = ''
   urlInput.value = ''
   urlTitle.value = ''
+  rootTopic.value = ''
   resetState()
   activeTab.value = 'file'
 }

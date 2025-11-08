@@ -41,6 +41,11 @@ class Neo4jClient:
             """)
             
             session.run("""
+                CREATE CONSTRAINT topic_name_unique IF NOT EXISTS
+                FOR (t:Topic) REQUIRE t.name IS UNIQUE
+            """)
+            
+            session.run("""
                 CREATE CONSTRAINT runtime_config_id_unique IF NOT EXISTS
                 FOR (r:RuntimeConfig) REQUIRE r.id IS UNIQUE
             """)
@@ -273,6 +278,92 @@ class Neo4jClient:
         RETURN c
         """
         return self.execute_query(query, {"alias": alias})
+    
+    def create_or_get_topic(self, topic_name: str) -> str:
+        """
+        Create or get a Topic root node.
+        
+        Args:
+            topic_name: Topic name (root node name)
+            
+        Returns:
+            Topic name (canonical name)
+        """
+        query = """
+        MERGE (t:Topic {name: $topic_name})
+        ON CREATE SET
+            t.created_at = datetime(),
+            t.updated_at = datetime()
+        ON MATCH SET
+            t.updated_at = datetime()
+        RETURN t.name as name
+        """
+        result = self.execute_query(query, {"topic_name": topic_name})
+        return result[0]["name"] if result else topic_name
+    
+    def link_document_to_topic(self, doc_id: str, topic_name: str) -> bool:
+        """
+        Create BELONGS_TO relationship between Document and Topic.
+        
+        Args:
+            doc_id: Document ID
+            topic_name: Topic name
+        """
+        query = """
+        MATCH (d:Document {id: $doc_id})
+        MATCH (t:Topic {name: $topic_name})
+        MERGE (d)-[r:BELONGS_TO]->(t)
+        SET r.created_at = coalesce(r.created_at, datetime()),
+            r.updated_at = datetime()
+        RETURN r
+        """
+        result = self.execute_query(query, {
+            "doc_id": doc_id,
+            "topic_name": topic_name
+        })
+        return len(result) > 0
+    
+    def link_concept_to_topic(self, concept_name: str, topic_name: str,
+                              page: Optional[int] = None,
+                              offset: Optional[List[int]] = None,
+                              evidence: Optional[str] = None,
+                              doc_id: Optional[str] = None) -> bool:
+        """
+        Create CONTAINS relationship between Topic and Concept.
+        
+        Args:
+            concept_name: Concept name
+            topic_name: Topic name
+            page: Page number (optional)
+            offset: Offset (optional)
+            evidence: Evidence text (optional)
+            doc_id: Document ID (optional, for tracking source)
+        """
+        properties = {}
+        if page is not None:
+            properties["page"] = page
+        if offset:
+            properties["offset"] = offset
+        if evidence:
+            properties["evidence"] = evidence
+        if doc_id:
+            properties["doc_id"] = doc_id
+        
+        query = """
+        MATCH (t:Topic {name: $topic_name})
+        MATCH (c:Concept {name: $concept_name})
+        MERGE (t)-[r:CONTAINS]->(c)
+        SET r += $properties,
+            r.created_at = coalesce(r.created_at, datetime()),
+            r.updated_at = datetime()
+        RETURN r
+        """
+        result = self.execute_query(query, {
+            "topic_name": topic_name,
+            "concept_name": concept_name,
+            "properties": properties
+        })
+        return len(result) > 0
 
 
 # Global client instance

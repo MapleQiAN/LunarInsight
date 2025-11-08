@@ -104,6 +104,7 @@ export const uploadFile = (
     enableAI?: boolean
     userPrompt?: string
     optimizePrompt?: boolean
+    rootTopic?: string
   }
 ): Promise<UploadResponse> => {
   const formData = new FormData()
@@ -120,6 +121,10 @@ export const uploadFile = (
     }
   }
   
+  if (options?.rootTopic) {
+    formData.append('root_topic', options.rootTopic)
+  }
+  
   return api.post('/uploads/process', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
@@ -133,6 +138,7 @@ export const uploadText = (
     enableAI?: boolean
     userPrompt?: string
     optimizePrompt?: boolean
+    rootTopic?: string
   }
 ): Promise<UploadResponse> => {
   const payload: any = { 
@@ -151,6 +157,10 @@ export const uploadText = (
     }
   }
   
+  if (options?.rootTopic) {
+    payload.root_topic = options.rootTopic
+  }
+  
   return api.post('/uploads/text', payload)
 }
 
@@ -162,6 +172,7 @@ export const uploadUrl = (
     enableAI?: boolean
     userPrompt?: string
     optimizePrompt?: boolean
+    rootTopic?: string
   }
 ): Promise<UploadResponse> => {
   const payload: any = { 
@@ -178,6 +189,10 @@ export const uploadUrl = (
     if (options.optimizePrompt !== undefined) {
       payload.optimize_prompt = options.optimizePrompt
     }
+  }
+  
+  if (options?.rootTopic) {
+    payload.root_topic = options.rootTopic
   }
   
   return api.post('/uploads/url', payload)
