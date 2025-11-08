@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # Neo4j Configuration
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
-    neo4j_pass: str = "test"
+    neo4j_pass: str = "test1234"
     
     # Redis Configuration
     redis_url: str = "redis://localhost:6379/0"

@@ -5,7 +5,7 @@ services:
     image: neo4j:5
     container_name: lunarinsight-neo4j
     environment:
-      - NEO4J_AUTH=neo4j/test
+      - NEO4J_AUTH=neo4j/test1234
       - NEO4J_PLUGINS=["apoc"]
     ports:
       - "7474:7474"  # HTTP
@@ -16,7 +16,7 @@ services:
       - ./data/neo4j/import:/var/lib/neo4j/import
       - ./data/neo4j/plugins:/plugins
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "test", "RETURN 1"]
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "test1234", "RETURN 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -42,7 +42,7 @@ services:
     environment:
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
-      - NEO4J_PASS=test
+      - NEO4J_PASS=test1234
       - REDIS_URL=redis://redis:6379/0
       - UPLOAD_DIR=/app/uploads
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
