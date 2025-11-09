@@ -75,6 +75,20 @@ FOR (cl:Claim) ON (cl.chunk_id);
 CREATE INDEX claim_type IF NOT EXISTS 
 FOR (cl:Claim) ON (cl.claim_type);
 
+// Claim 去重索引（P0 新增）
+CREATE INDEX claim_normalized_hash IF NOT EXISTS 
+FOR (cl:Claim) ON (cl.normalized_text_hash);
+
+CREATE INDEX claim_canonical_id IF NOT EXISTS 
+FOR (cl:Claim) ON (cl.canonical_id);
+
+// Claim 属性索引（P0 新增）
+CREATE INDEX claim_modality IF NOT EXISTS 
+FOR (cl:Claim) ON (cl.modality);
+
+CREATE INDEX claim_polarity IF NOT EXISTS 
+FOR (cl:Claim) ON (cl.polarity);
+
 // Theme 索引（新增）
 CREATE INDEX theme_community_id IF NOT EXISTS 
 FOR (t:Theme) ON (t.community_id);
@@ -106,6 +120,15 @@ CALL db.index.vector.createNodeIndex(
 CALL db.index.vector.createNodeIndex(
   'chunk_embeddings',
   'Chunk',
+  'embedding',
+  1536,
+  'cosine'
+);
+
+// Claim 向量索引（P1 新增，用于 GraphRAG 检索）
+CALL db.index.vector.createNodeIndex(
+  'claim_embeddings',
+  'Claim',
   'embedding',
   1536,
   'cosine'
