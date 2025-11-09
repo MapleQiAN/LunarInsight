@@ -118,9 +118,12 @@ class Neo4jClient:
                                 if any(keyword in error_msg for keyword in [
                                     "already exists", 
                                     "equivalent index already exists",
-                                    "index with name"
+                                    "index with name",
+                                    "an equivalent index already exists",
+                                    "constraint already exists"
                                 ]):
                                     continue
+                                # 对于语法错误，也打印警告但不中断初始化
                                 print(f"Warning: Failed to execute schema statement: {e}")
                                 print(f"Statement: {statement[:100]}...")
                     print("Schema initialized from schema.cypher")

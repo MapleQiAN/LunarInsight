@@ -93,14 +93,14 @@ FOR (a:Alias) ON (a.canonical);
 
 // Concept 向量索引（用于语义检索）
 // 维度: 1536 (OpenAI text-embedding-3-small)
+// 注意: db.index.vector.createNodeIndex 是 void 过程，不能使用 YIELD/RETURN
 CALL db.index.vector.createNodeIndex(
   'concept_embeddings',
   'Concept',
   'embedding',
   1536,
   'cosine'
-) YIELD name, type, entityType, propertyName, dimensions, similarityFunction
-RETURN name, type, entityType, propertyName, dimensions, similarityFunction;
+);
 
 // Chunk 向量索引（用于语义块检索）
 CALL db.index.vector.createNodeIndex(
@@ -109,8 +109,7 @@ CALL db.index.vector.createNodeIndex(
   'embedding',
   1536,
   'cosine'
-) YIELD name, type, entityType, propertyName, dimensions, similarityFunction
-RETURN name, type, entityType, propertyName, dimensions, similarityFunction;
+);
 
 // ============================================
 // 4. 关系类型说明
