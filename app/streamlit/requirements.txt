@@ -1,6 +1,0 @@
-streamlit==1.28.0
-requests==2.31.0
-pyvis==0.3.2
-networkx==3.2.1
-pandas==2.1.3
-
