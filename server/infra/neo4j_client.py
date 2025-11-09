@@ -1,9 +1,11 @@
 """Neo4j client for graph operations."""
 import json
 import os
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from neo4j import GraphDatabase, Driver
+from neo4j.exceptions import ServiceUnavailable
 from infra.config import settings
 
 
@@ -21,12 +23,40 @@ class Neo4jClient:
             self._initialize_schema()
             self._initialized = True
     
-    def _connect(self):
-        """Establish connection to Neo4j."""
-        self.driver = GraphDatabase.driver(
-            settings.neo4j_uri,
-            auth=(settings.neo4j_user, settings.neo4j_pass)
-        )
+    def _connect(self, max_retries: int = 30, retry_delay: float = 2.0):
+        """
+        Establish connection to Neo4j with retry logic.
+        
+        Args:
+            max_retries: Maximum number of connection retry attempts
+            retry_delay: Delay in seconds between retries
+        """
+        for attempt in range(max_retries):
+            try:
+                self.driver = GraphDatabase.driver(
+                    settings.neo4j_uri,
+                    auth=(settings.neo4j_user, settings.neo4j_pass)
+                )
+                # Verify connection by attempting a simple query
+                with self.driver.session() as session:
+                    session.run("RETURN 1")
+                print(f"✅ Neo4j connection established (attempt {attempt + 1})")
+                return
+            except (ServiceUnavailable, OSError, Exception) as e:
+                # 对于认证错误等非连接问题，直接抛出
+                error_str = str(e).lower()
+                if any(keyword in error_str for keyword in ["authentication", "auth", "unauthorized", "invalid credentials"]):
+                    raise ConnectionError(f"Neo4j authentication failed: {e}")
+                
+                # 对于连接问题，进行重试
+                if attempt < max_retries - 1:
+                    print(f"⏳ Waiting for Neo4j Bolt to be ready... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                else:
+                    raise ConnectionError(
+                        f"Failed to connect to Neo4j after {max_retries} attempts. "
+                        f"Last error: {e}"
+                    )
     
     def _initialize_schema(self):
         """Initialize database schema: constraints and indexes."""
