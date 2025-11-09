@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from typing import Literal, List, Dict, Any, Optional
 import logging
 
-from server.graphrag.stages.stage7_query_service import QueryService
+from graphrag.stages.stage7_query_service import QueryService
 
 logger = logging.getLogger("graphrag.api.query")
 

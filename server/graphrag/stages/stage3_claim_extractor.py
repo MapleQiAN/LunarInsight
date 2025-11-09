@@ -10,14 +10,14 @@ import hashlib
 import re
 from pathlib import Path
 from typing import List, Tuple, Optional
-from server.graphrag.models.chunk import ChunkMetadata
-from server.graphrag.models.claim import Claim, ClaimRelation
-from server.graphrag.config import get_config
-from server.services.config_service import config_service
-from server.infra.ai_providers import AIProviderFactory
-from server.graphrag.utils.evidence_aligner import align_evidence
-from server.graphrag.utils.claim_deduplicator import deduplicate_claims, compute_text_hash
-from server.graphrag.utils.nli_verifier import NLIVerifier
+from graphrag.models.chunk import ChunkMetadata
+from graphrag.models.claim import Claim, ClaimRelation
+from graphrag.config import get_config
+from services.config_service import config_service
+from infra.ai_providers import AIProviderFactory
+from graphrag.utils.evidence_aligner import align_evidence
+from graphrag.utils.claim_deduplicator import deduplicate_claims, compute_text_hash
+from graphrag.utils.nli_verifier import NLIVerifier
 
 logger = logging.getLogger("graphrag.stage3")
 

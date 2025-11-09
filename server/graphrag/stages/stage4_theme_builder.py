@@ -6,7 +6,7 @@
 
 import logging
 from typing import List
-from server.graphrag.models.theme import Theme
+from graphrag.models.theme import Theme
 
 logger = logging.getLogger("graphrag.stage4")
 

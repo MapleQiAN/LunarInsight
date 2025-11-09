@@ -8,8 +8,8 @@ import logging
 import hashlib
 import re
 from typing import List, Dict, Optional, Tuple
-from server.graphrag.models.claim import Claim
-from server.graphrag.utils.embedding import get_embedding, cosine_similarity, batch_embed
+from graphrag.models.claim import Claim
+from graphrag.utils.embedding import get_embedding, cosine_similarity, batch_embed
 
 logger = logging.getLogger("graphrag.deduplicator")
 

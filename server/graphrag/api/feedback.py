@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import logging
 
-from server.graphrag.models.feedback import (
+from graphrag.models.feedback import (
     MergeRequest,
     CorrectionRequest,
     UnlinkRequest

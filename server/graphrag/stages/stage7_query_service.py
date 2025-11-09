@@ -9,10 +9,10 @@ from typing import Dict, Any, List, Literal, Optional, Set, Tuple
 from dataclasses import dataclass
 from collections import defaultdict
 
-from server.infra.neo4j_client import neo4j_client
-from server.graphrag.utils.embedding import get_embedding, cosine_similarity
-from server.graphrag.models.claim import Claim
-from server.graphrag.models.theme import Theme
+from infra.neo4j_client import neo4j_client
+from graphrag.utils.embedding import get_embedding, cosine_similarity
+from graphrag.models.claim import Claim
+from graphrag.models.theme import Theme
 
 logger = logging.getLogger("graphrag.stage7")
 

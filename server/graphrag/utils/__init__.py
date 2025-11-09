@@ -4,28 +4,28 @@ GraphRAG 工具函数
 文本处理、向量化、数据校验等通用工具
 """
 
-from server.graphrag.utils.text_processing import (
+from graphrag.utils.text_processing import (
     split_sentences,
     extract_sections,
     sliding_window
 )
-from server.graphrag.utils.embedding import (
+from graphrag.utils.embedding import (
     get_embedding,
     batch_embed,
     cosine_similarity
 )
 
 # P0 新增工具
-from server.graphrag.utils.evidence_aligner import (
+from graphrag.utils.evidence_aligner import (
     align_evidence,
     extract_evidence_quote
 )
 
-from server.graphrag.utils.claim_deduplicator import (
+from graphrag.utils.claim_deduplicator import (
     deduplicate_claims,
     compute_text_hash
 )
-from server.graphrag.utils.validation import (
+from graphrag.utils.validation import (
     validate_chunk,
     validate_claim,
     validate_concept

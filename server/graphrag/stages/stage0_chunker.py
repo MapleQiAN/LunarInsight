@@ -6,9 +6,9 @@
 
 import logging
 from typing import List
-from server.graphrag.models.chunk import ChunkMetadata
-from server.graphrag.utils.text_processing import split_sentences, sliding_window
-from server.graphrag.config import get_config
+from graphrag.models.chunk import ChunkMetadata
+from graphrag.utils.text_processing import split_sentences, sliding_window
+from graphrag.config import get_config
 
 logger = logging.getLogger("graphrag.stage0")
 

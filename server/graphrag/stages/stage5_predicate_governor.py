@@ -5,7 +5,7 @@
 """
 
 import logging
-from server.graphrag.config import get_config
+from graphrag.config import get_config
 
 logger = logging.getLogger("graphrag.stage5")
 

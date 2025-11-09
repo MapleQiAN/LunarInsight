@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     neo4j_pass: str = "test1234"
     
     # Redis Configuration
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = "redis://localhost:16379/0"
     
     # AI Provider Configuration
     ai_provider: Literal[

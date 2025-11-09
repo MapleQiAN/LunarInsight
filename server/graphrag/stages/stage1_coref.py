@@ -10,8 +10,8 @@ import re
 from typing import Dict, Tuple, List, Optional, Literal, Any
 from dataclasses import dataclass, field
 from enum import Enum
-from server.graphrag.models.chunk import ChunkMetadata
-from server.graphrag.config import get_config
+from graphrag.models.chunk import ChunkMetadata
+from graphrag.config import get_config
 
 logger = logging.getLogger("graphrag.stage1")
 

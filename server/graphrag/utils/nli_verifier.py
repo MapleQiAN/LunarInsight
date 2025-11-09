@@ -6,7 +6,7 @@ NLI (Natural Language Inference) 验证工具
 
 import logging
 from typing import Literal, Optional, Dict, Any
-from server.infra.ai_providers import BaseAIClient
+from infra.ai_providers import BaseAIClient
 
 logger = logging.getLogger("graphrag.nli")
 

@@ -5,7 +5,7 @@
 """
 
 from typing import Dict, Any, List, Optional, Tuple
-from server.graphrag.config import get_config
+from graphrag.config import get_config
 
 
 class ValidationError(Exception):

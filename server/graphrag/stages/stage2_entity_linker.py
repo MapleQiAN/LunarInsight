@@ -14,12 +14,12 @@ import re
 import hashlib
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from server.graphrag.models.chunk import ChunkMetadata
-from server.graphrag.config import get_config
-from server.infra.neo4j_client import neo4j_client
-from server.infra.config import settings
-from server.services.config_service import config_service
-from server.graphrag.utils.embedding import get_embedding, cosine_similarity
+from graphrag.models.chunk import ChunkMetadata
+from graphrag.config import get_config
+from infra.neo4j_client import neo4j_client
+from infra.config import settings
+from services.config_service import config_service
+from graphrag.utils.embedding import get_embedding, cosine_similarity
 
 logger = logging.getLogger("graphrag.stage2")
 
