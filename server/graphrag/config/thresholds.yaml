@@ -124,6 +124,37 @@ coreference:
   # Alias 置信度阈值
   alias_min_confidence: 0.8
 
+  # 质量门控阈值
+  quality_gates:
+    # rewrite 模式：强替换（通过门槛）
+    rewrite_coverage_min: 0.6      # 覆盖率最低要求
+    rewrite_conflict_max: 0.15      # 冲突率最高容忍
+    
+    # local 模式：局部替换（降级）
+    local_coverage_min: 0.3         # 覆盖率最低要求
+    local_conflict_max: 0.25         # 冲突率最高容忍
+    
+    # alias_only 模式：只挂别名（最低要求）
+    alias_only_coverage_min: 0.1    # 覆盖率最低要求
+  
+  # 打分权重
+  scoring_weights:
+    distance_decay: 0.4             # 句距衰减权重
+    parenthesis_boost: 0.8          # 括号简称强约束提升
+    type_consistency: 0.2            # 类型一致性权重
+    semantic_similarity: 0.0         # 语义相似度权重（暂未实现）
+    syntactic_consistency: 0.0      # 句法一致性权重（暂未实现）
+  
+  # 候选生成参数
+  candidate_generation:
+    context_window: 3                # 语境窗口大小（句子数）
+    max_candidates_per_mention: 5    # 每个提及的最大候选数
+  
+  # 一致性校验参数
+  consistency:
+    alias_consistency_strict: true   # 括号别名严格一致性
+    window_consistency_enabled: true # 窗口内一致性检查
+
 # 向量化
 embedding:
   # 批量处理大小
