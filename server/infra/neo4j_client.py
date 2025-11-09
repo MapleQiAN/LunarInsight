@@ -1,5 +1,7 @@
 """Neo4j client for graph operations."""
 import json
+import os
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from neo4j import GraphDatabase, Driver
 from infra.config import settings
@@ -28,6 +30,79 @@ class Neo4jClient:
     
     def _initialize_schema(self):
         """Initialize database schema: constraints and indexes."""
+        # 优先使用 schema.cypher 文件（如果存在）
+        schema_file = Path(__file__).parent / "schema.cypher"
+        
+        if schema_file.exists():
+            try:
+                # 读取并执行 schema.cypher
+                with open(schema_file, "r", encoding="utf-8") as f:
+                    schema_cypher = f.read()
+                
+                # 分割为多个语句（以分号分隔，但保留 CALL 语句的完整性）
+                statements = []
+                current_statement = []
+                in_call = False
+                
+                for line in schema_cypher.split("\n"):
+                    line = line.strip()
+                    # 跳过注释和空行
+                    if not line or line.startswith("//"):
+                        continue
+                    
+                    current_statement.append(line)
+                    
+                    # 检查是否是 CALL 语句的结束
+                    if line.upper().startswith("CALL"):
+                        in_call = True
+                    elif in_call and ("RETURN" in line.upper() or line.endswith(";")):
+                        in_call = False
+                        if line.endswith(";"):
+                            stmt = " ".join(current_statement).rstrip(";")
+                            if stmt:
+                                statements.append(stmt)
+                            current_statement = []
+                    elif line.endswith(";") and not in_call:
+                        stmt = " ".join(current_statement).rstrip(";")
+                        if stmt:
+                            statements.append(stmt)
+                        current_statement = []
+                
+                # 处理最后一个语句
+                if current_statement:
+                    stmt = " ".join(current_statement).rstrip(";")
+                    if stmt:
+                        statements.append(stmt)
+                
+                with self.driver.session() as session:
+                    for statement in statements:
+                        if statement.strip():
+                            try:
+                                result = session.run(statement)
+                                # 对于 CALL 语句，需要消费结果
+                                if "CALL" in statement.upper():
+                                    list(result)
+                            except Exception as e:
+                                # 忽略已存在的约束/索引错误
+                                error_msg = str(e).lower()
+                                if any(keyword in error_msg for keyword in [
+                                    "already exists", 
+                                    "equivalent index already exists",
+                                    "index with name"
+                                ]):
+                                    continue
+                                print(f"Warning: Failed to execute schema statement: {e}")
+                                print(f"Statement: {statement[:100]}...")
+                    print("Schema initialized from schema.cypher")
+            except Exception as e:
+                print(f"Warning: Failed to load schema.cypher, falling back to inline schema: {e}")
+                self._initialize_schema_inline()
+        else:
+            # 后备方案：使用内联 Schema（向后兼容）
+            self._initialize_schema_inline()
+    
+    def _initialize_schema_inline(self):
+        """Initialize schema using inline Cypher (backward compatibility)."""
         with self.driver.session() as session:
             # Constraints
             session.run("""

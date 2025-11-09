@@ -60,6 +60,56 @@ class Settings(BaseSettings):
     # API Configuration
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    
+    # ============================================
+    # GraphRAG 配置 (v2.0-GraphRAG)
+    # ============================================
+    
+    # GraphRAG 功能开关
+    enable_neo4j_graphrag: bool = True
+    enable_vector_search: bool = True
+    
+    # 模型配置
+    llm_model: str = "gpt-4o-mini"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimension: int = 1536  # OpenAI text-embedding-3-small 维度
+    
+    # 本体约束配置
+    # 允许的节点类型
+    allowed_node_types: list[str] = [
+        "Concept", "Person", "Method", "Tool", "Metric", 
+        "Chunk", "Claim", "Theme", "Document", "Topic"
+    ]
+    
+    # 允许的关系类型（标准谓词白名单）
+    allowed_relations: list[str] = [
+        "IS_A", "PART_OF", "USES", "IMPLEMENTED_BY", "CREATES",
+        "DERIVES_FROM", "CONTAINS", "BELONGS_TO", "SUPPORTS",
+        "CONTRADICTS", "CAUSES", "COMPARES_WITH", "CONDITIONS",
+        "PURPOSE", "MENTIONS", "CONTAINS_CLAIM", "BELONGS_TO_THEME",
+        "EVIDENCE_FROM", "SIMILAR_TO"
+    ]
+    
+    # 阈值配置
+    entity_link_accept_threshold: float = 0.85  # 实体链接接受阈值
+    entity_link_review_threshold: float = 0.65   # 实体链接复核阈值
+    claim_confidence_threshold: float = 0.7      # 论断置信度阈值
+    
+    # 向量检索配置
+    vector_search_top_k: int = 5                 # 向量检索 Top-K
+    vector_search_threshold: float = 0.7         # 向量相似度阈值
+    
+    # 社区检测配置
+    community_algorithm: str = "louvain"         # 社区检测算法: louvain | leiden
+    community_min_size: int = 3                  # 最小社区规模
+    
+    # 谓词治理配置
+    predicate_governance_enabled: bool = True    # 是否启用谓词治理
+    predicate_mapping_file: str = "graphrag/config/predicates.yaml"
+    ontology_config_file: str = "graphrag/config/ontology.yaml"
+    
+    # 构建版本配置
+    build_version_prefix: str = "v2.0"          # 构建版本前缀
 
 
 # Global settings instance

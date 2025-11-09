@@ -2,11 +2,13 @@ version: "3.9"
 
 services:
   neo4j:
-    image: neo4j:5
+    image: neo4j:5.15-community
     container_name: lunarinsight-neo4j
     environment:
       - NEO4J_AUTH=neo4j/test1234
-      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*,gds.*
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*,gds.*
     ports:
       - "7474:7474"  # HTTP
       - "7687:7687"  # Bolt
@@ -15,6 +17,7 @@ services:
       - ./data/neo4j/logs:/logs
       - ./data/neo4j/import:/var/lib/neo4j/import
       - ./data/neo4j/plugins:/plugins
+      - ./server/infra/schema.cypher:/docker-entrypoint-initdb.d/init.cypher:ro
     healthcheck:
       test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "test1234", "RETURN 1"]
       interval: 10s
@@ -46,6 +49,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - UPLOAD_DIR=/app/uploads
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ENABLE_NEO4J_GRAPHRAG=true
+      - ENABLE_VECTOR_SEARCH=true
     ports:
       - "8000:8000"
     volumes:
