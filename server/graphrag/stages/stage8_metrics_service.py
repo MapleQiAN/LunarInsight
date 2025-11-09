@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 logger = logging.getLogger("graphrag.stage8")
 
