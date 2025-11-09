@@ -1,0 +1,271 @@
+# 本体类型约束配置
+# 定义允许的节点类型与属性要求
+
+# 节点类型定义
+node_types:
+  Concept:
+    description: "抽象概念、理论、方法论"
+    required_properties:
+      - name           # 概念名称
+      - id             # 唯一标识
+    optional_properties:
+      - description    # 描述
+      - domain         # 所属领域
+      - aliases        # 别名列表
+      - embedding      # 向量表示
+      - created_at     # 创建时间
+      - updated_at     # 更新时间
+      - build_version  # 构建版本
+    
+  Person:
+    description: "人物（作者、研究者）"
+    required_properties:
+      - name
+      - id
+    optional_properties:
+      - affiliation    # 所属机构
+      - title          # 职称
+      - bio            # 简介
+      - email
+      - url
+    
+  Method:
+    description: "具体方法、算法、技术"
+    required_properties:
+      - name
+      - id
+    optional_properties:
+      - description
+      - complexity     # 复杂度
+      - year           # 提出年份
+      - domain
+      - aliases
+    
+  Tool:
+    description: "工具、框架、库"
+    required_properties:
+      - name
+      - id
+    optional_properties:
+      - description
+      - version        # 版本
+      - language       # 编程语言
+      - license        # 许可证
+      - url
+      - github_url
+    
+  Metric:
+    description: "评价指标、度量"
+    required_properties:
+      - name
+      - id
+    optional_properties:
+      - description
+      - unit           # 单位
+      - range          # 取值范围
+      - higher_better  # 越高越好（布尔值）
+    
+  Chunk:
+    description: "文档语义块"
+    required_properties:
+      - id
+      - text
+      - doc_id
+    optional_properties:
+      - section_path   # 章节路径
+      - page_num       # 页码
+      - sentence_ids   # 句子 ID 列表
+      - embedding      # 向量表示
+    
+  Claim:
+    description: "论断、观点、命题"
+    required_properties:
+      - id
+      - text
+      - doc_id
+      - chunk_id
+    optional_properties:
+      - sentence_ids   # 句子 ID 列表
+      - claim_type     # 类型: fact/hypothesis/conclusion
+      - confidence     # 置信度
+      - evidence_span  # 证据区间 [start, end]
+    
+  Theme:
+    description: "主题社区"
+    required_properties:
+      - id
+      - label
+      - summary
+    optional_properties:
+      - level          # 层级: 1-粗粒度, 2-细粒度
+      - keywords       # 关键词列表
+      - community_id   # 社区 ID（GDS）
+      - member_count   # 成员数量
+
+# 关系类型定义
+relationship_types:
+  MENTIONS:
+    description: "文档/块提及概念"
+    source: [Document, Chunk]
+    target: [Concept, Person, Method, Tool, Metric]
+    properties:
+      - count          # 提及次数
+      - confidence     # 置信度
+  
+  IS_A:
+    description: "上下位关系"
+    source: [Concept, Method]
+    target: [Concept]
+    properties:
+      - confidence
+  
+  PART_OF:
+    description: "组成关系"
+    source: [Concept, Method, Tool]
+    target: [Concept, System]
+    properties:
+      - confidence
+  
+  USES:
+    description: "使用关系"
+    source: [Method, Tool, Person]
+    target: [Tool, Algorithm, Method, Concept]
+    properties:
+      - confidence
+      - context        # 使用场景
+  
+  IMPLEMENTED_BY:
+    description: "实现关系"
+    source: [Method, Algorithm]
+    target: [Tool, Language]
+    properties:
+      - version        # 实现版本
+  
+  CREATES:
+    description: "创建关系"
+    source: [Person]
+    target: [Method, Tool, Theory]
+    properties:
+      - year           # 创建年份
+  
+  DERIVES_FROM:
+    description: "派生关系"
+    source: [Method, Concept]
+    target: [Method, Theory, Concept]
+    properties:
+      - confidence
+  
+  CONTAINS:
+    description: "包含关系"
+    source: [Document, Chunk, System]
+    target: [Chunk, Concept, Component]
+    properties: []
+  
+  BELONGS_TO:
+    description: "归属关系"
+    source: [Concept, Method, Tool, Person]
+    target: [Domain, Organization, Theme]
+    properties: []
+  
+  BELONGS_TO_THEME:
+    description: "归属主题"
+    source: [Concept, Claim]
+    target: [Theme]
+    properties:
+      - weight         # 归属权重
+  
+  SUPPORTS:
+    description: "支撑关系"
+    source: [Claim, Evidence]
+    target: [Claim, Hypothesis]
+    properties:
+      - strength       # 支撑强度
+      - confidence
+  
+  CONTRADICTS:
+    description: "反驳关系"
+    source: [Claim]
+    target: [Claim, Hypothesis]
+    properties:
+      - strength       # 反驳强度
+  
+  CAUSES:
+    description: "因果关系"
+    source: [Claim, Event]
+    target: [Claim, Phenomenon]
+    properties:
+      - confidence
+      - mechanism      # 作用机制
+  
+  COMPARES_WITH:
+    description: "对比关系"
+    source: [Method, Tool, Metric]
+    target: [Method, Tool, Metric]
+    properties:
+      - dimension      # 对比维度
+      - result         # 对比结果
+  
+  CONDITIONS:
+    description: "条件关系（如果-则）"
+    source: [Claim]
+    target: [Claim]
+    properties:
+      - type           # 充分/必要/充要
+  
+  PURPOSE:
+    description: "目的关系"
+    source: [Method, Tool, Action]
+    target: [Goal, Objective]
+    properties: []
+  
+  EVIDENCE_FROM:
+    description: "证据回溯"
+    source: [Concept, Claim]
+    target: [Chunk]
+    properties:
+      - doc_id         # 文档 ID
+      - section_path   # 章节路径
+      - sentence_ids   # 句子 ID 列表
+
+# 域约束
+domain_constraints:
+  # 默认领域列表（可扩展）
+  allowed_domains:
+    - "Machine Learning"
+    - "Natural Language Processing"
+    - "Computer Vision"
+    - "Reinforcement Learning"
+    - "Deep Learning"
+    - "Data Science"
+    - "Software Engineering"
+    - "Distributed Systems"
+    - "Databases"
+    - "Algorithms"
+    - "Theory"
+    - "Other"
+
+# 数据质量约束
+quality_constraints:
+  # 概念名称长度
+  concept_name_min_length: 2
+  concept_name_max_length: 100
+  
+  # 描述长度
+  description_min_length: 10
+  description_max_length: 1000
+  
+  # Chunk 长度
+  chunk_min_length: 50
+  chunk_max_length: 2000
+  
+  # Claim 长度
+  claim_min_length: 20
+  claim_max_length: 500
+  
+  # 置信度范围
+  confidence_min: 0.0
+  confidence_max: 1.0
+  
+  # 嵌入维度（OpenAI text-embedding-3-small）
+  embedding_dimension: 1536
+

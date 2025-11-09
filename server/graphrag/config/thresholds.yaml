@@ -1,0 +1,155 @@
+# 阈值配置
+# 控制各阶段的质量门限
+
+# 阶段 2: 实体链接
+entity_linking:
+  # 自动接受阈值
+  accept_threshold: 0.85
+  
+  # 待复核阈值（低于此值但高于 reject_threshold 的进入复核队列）
+  review_threshold: 0.65
+  
+  # 拒绝阈值（低于此值直接丢弃）
+  reject_threshold: 0.4
+  
+  # 候选生成参数
+  candidate_generation:
+    bm25_top_k: 20          # BM25 检索 Top-K
+    vector_top_k: 20        # 向量检索 Top-K
+    combined_top_k: 10      # 合并后 Top-K
+  
+  # 精排权重
+  ranking_weights:
+    lexical_similarity: 0.2   # 词形相似度
+    semantic_similarity: 0.4  # 语义相似度
+    context_match: 0.2        # 上下文一致性
+    type_consistency: 0.1     # 类型一致性
+    prior_frequency: 0.1      # 先验频次
+
+# 阶段 3: 论断抽取
+claim_extraction:
+  # 论断置信度阈值
+  min_confidence: 0.7
+  
+  # 论断长度限制
+  min_length: 20
+  max_length: 500
+  
+  # 关系置信度阈值
+  relation_min_confidence: 0.6
+  
+  # 每个 Chunk 最多抽取的论断数
+  max_claims_per_chunk: 5
+
+# 阶段 4: 主题社区
+theme_building:
+  # Louvain 算法参数
+  louvain:
+    resolution: 1.0           # 分辨率（越高社区越细）
+    max_iterations: 100
+    tolerance: 0.0001
+  
+  # 主题卡片参数
+  summary:
+    max_concepts_per_summary: 10    # 每个主题摘要的最大概念数
+    max_claims_per_summary: 5       # 每个主题摘要的最大论断数
+    summary_max_length: 500         # 摘要最大长度
+  
+  # 社区大小过滤
+  min_community_size: 3      # 最小社区成员数
+  max_community_size: 100    # 最大社区成员数（超过则再分）
+
+# 阶段 5: 谓词治理
+predicate_governance:
+  # OTHER 谓词占比告警阈值
+  other_predicate_warning_ratio: 0.1
+  
+  # 自动扩表参数（见 predicates.yaml）
+  auto_expand_min_occurrences: 50
+  auto_expand_min_confidence: 0.8
+
+# 阶段 7: GraphRAG 检索
+query:
+  # 检索参数
+  local_search:
+    max_hops: 2               # 图遍历最大跳数
+    max_nodes: 50             # 最大返回节点数
+  
+  global_search:
+    top_communities: 5        # Top-K 社区
+  
+  hybrid_search:
+    local_weight: 0.6         # Local 权重
+    global_weight: 0.4        # Global 权重
+  
+  # 重排序参数
+  reranking:
+    top_k: 10                 # 初始召回 Top-K
+    final_k: 5                # 最终返回 Top-K
+  
+  # 生成参数
+  generation:
+    max_evidence_chunks: 5    # 最多引用证据块数
+    max_context_length: 4000  # 最大上下文长度（tokens）
+    temperature: 0.1          # 生成温度（越低越确定）
+
+# 阶段 8: 评价与反馈
+metrics:
+  # 孤立节点告警阈值
+  isolated_node_warning_ratio: 0.05
+  
+  # Alias 增长率告警阈值（每天）
+  alias_growth_warning_rate: 0.2
+  
+  # 评测数据集大小
+  evaluation:
+    entity_linking_samples: 100     # 实体链接标注样本数
+    qa_test_set_size: 50            # 问答测试集大小
+
+# 篇章切分
+chunking:
+  # 滑动窗口参数
+  window_size: 4            # 窗口大小（句子数）
+  step_size: 2              # 步长（句子数）
+  
+  # 句子长度过滤
+  min_sentence_length: 10   # 最短句子长度
+  max_sentence_length: 1000 # 最长句子长度
+
+# 指代消解
+coreference:
+  # 代词映射最大距离（句子数）
+  max_pronoun_distance: 3
+  
+  # Alias 置信度阈值
+  alias_min_confidence: 0.8
+
+# 向量化
+embedding:
+  # 批量处理大小
+  batch_size: 100
+  
+  # 向量相似度阈值（用于去重）
+  similarity_threshold: 0.95
+  
+  # 嵌入模型
+  model: "text-embedding-3-small"
+  dimension: 1536
+
+# 性能控制
+performance:
+  # LLM 调用并发数
+  llm_concurrency: 5
+  
+  # 批量写入大小
+  batch_write_size: 100
+  
+  # 最大处理文档大小（字节）
+  max_document_size: 10485760  # 10 MB
+  
+  # 超时设置
+  timeouts:
+    llm_call: 30              # LLM 调用超时（秒）
+    neo4j_query: 60           # Neo4j 查询超时（秒）
+    total_processing: 1200    # 总处理超时（秒，20 分钟）
+

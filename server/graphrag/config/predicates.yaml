@@ -1,0 +1,129 @@
+# 谓词白名单与映射配置
+# 用于阶段 5: 谓词治理
+
+# 标准谓词集合（小而硬）
+standard:
+  - IS_A              # 上下位关系
+  - PART_OF           # 组成关系
+  - USES              # 使用关系
+  - IMPLEMENTED_BY    # 实现关系
+  - CREATES           # 创建关系
+  - DERIVES_FROM      # 派生关系
+  - CONTAINS          # 包含关系
+  - BELONGS_TO        # 归属关系
+  - SUPPORTS          # 支撑关系
+  - CONTRADICTS       # 反驳关系
+  - CAUSES            # 因果关系
+  - COMPARES_WITH     # 对比关系
+  - CONDITIONS        # 条件关系
+  - PURPOSE           # 目的关系
+
+# 自然语言谓词映射到标准谓词
+mappings:
+  # 使用类
+  "基于": USES
+  "采用": USES
+  "依赖": USES
+  "利用": USES
+  "运用": USES
+  "应用": USES
+  
+  # 包含类
+  "包含": CONTAINS
+  "涵盖": CONTAINS
+  "囊括": CONTAINS
+  
+  # 归属类
+  "属于": BELONGS_TO
+  "隶属于": BELONGS_TO
+  "归于": BELONGS_TO
+  
+  # 派生类
+  "源自": DERIVES_FROM
+  "来源于": DERIVES_FROM
+  "起源于": DERIVES_FROM
+  
+  # 因果类
+  "导致": CAUSES
+  "引起": CAUSES
+  "造成": CAUSES
+  "产生": CAUSES
+  
+  # 支撑类
+  "支持": SUPPORTS
+  "佐证": SUPPORTS
+  "证明": SUPPORTS
+  "验证": SUPPORTS
+  
+  # 对比类
+  "对比": COMPARES_WITH
+  "比较": COMPARES_WITH
+  "相对于": COMPARES_WITH
+
+# 类型约束（头类型, 谓词, 尾类型）白名单
+type_constraints:
+  # Method 相关
+  - source: Method
+    predicate: USES
+    target: [Tool, Algorithm, Concept]
+  
+  - source: Method
+    predicate: DERIVES_FROM
+    target: [Method, Theory]
+  
+  # Person 相关
+  - source: Person
+    predicate: CREATES
+    target: [Method, Tool, Theory]
+  
+  - source: Person
+    predicate: BELONGS_TO
+    target: [Organization, Institution]
+  
+  # Concept 相关
+  - source: Concept
+    predicate: IS_A
+    target: [Concept]
+  
+  - source: Concept
+    predicate: PART_OF
+    target: [Concept, Domain]
+  
+  # Tool 相关
+  - source: Tool
+    predicate: IMPLEMENTED_BY
+    target: [Language, Framework]
+  
+  - source: Tool
+    predicate: USES
+    target: [Algorithm, Method]
+  
+  # Claim 相关
+  - source: Claim
+    predicate: SUPPORTS
+    target: [Claim, Hypothesis]
+  
+  - source: Claim
+    predicate: CONTRADICTS
+    target: [Claim, Hypothesis]
+  
+  - source: Claim
+    predicate: CAUSES
+    target: [Claim, Phenomenon]
+
+# 未匹配谓词处理策略
+unmatched_strategy:
+  # "reject" - 直接拒收
+  # "review" - 打回复核队列
+  # "accept_with_other" - 收敛到 OTHER(原始谓词)
+  mode: review
+  
+  # 复核队列阈值（累积数量）
+  review_threshold: 100
+  
+  # 自动扩表策略（当某个 OTHER 谓词出现频次超过阈值时，考虑加入标准集）
+  auto_expand:
+    enabled: true
+    min_occurrences: 50
+    min_confidence: 0.8
+

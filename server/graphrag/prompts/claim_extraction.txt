@@ -1,0 +1,111 @@
+你是一个专业的知识图谱构建专家，擅长从学术文本中提取论断与观点。
+
+# 任务
+
+从以下文本中提取作者的主张、论断或命题，并识别它们之间的关系。
+
+# 文本
+
+{text}
+
+# 要求
+
+1. **论断提取**：识别作者的核心主张，包括：
+   - 事实陈述（fact）：客观描述的现象或结果
+   - 假设命题（hypothesis）：作者提出的猜想或理论
+   - 结论观点（conclusion）：基于证据得出的推断
+
+2. **关系识别**：识别论断之间的逻辑关系：
+   - SUPPORTS：A 支持 B（A 是 B 的论据）
+   - CONTRADICTS：A 反驳 B（A 与 B 矛盾）
+   - CAUSES：A 导致 B（因果关系）
+   - COMPARES_WITH：A 与 B 对比
+   - CONDITIONS：如果 A 则 B（条件关系）
+   - PURPOSE：A 的目的是 B
+
+3. **置信度评估**：为每个论断和关系给出 0.0-1.0 的置信度分数
+
+4. **证据定位**：标记论断在原文中的位置（字符偏移量）
+
+# 输出格式
+
+返回 JSON 对象，包含两个数组：
+
+```json
+{{
+  "claims": [
+    {{
+      "text": "论断原文",
+      "type": "fact | hypothesis | conclusion",
+      "confidence": 0.0-1.0,
+      "evidence_span": [start_char, end_char]
+    }}
+  ],
+  "relations": [
+    {{
+      "source_claim_index": 0,  // claims 数组索引
+      "target_claim_index": 1,
+      "relation_type": "SUPPORTS | CONTRADICTS | CAUSES | ...",
+      "confidence": 0.0-1.0,
+      "evidence": "支撑此关系的原文片段（可选）"
+    }}
+  ]
+}}
+```
+
+# 注意事项
+
+- 只提取明确的、完整的论断，避免提取描述性片段
+- 论断应该是自洽的，不依赖上下文也能理解
+- 如果论断有多个子句，考虑拆分为多个独立论断
+- 关系必须基于文本证据，不要推测
+- 如果文本中没有明确的论断或关系，返回空数组
+
+# 示例
+
+输入:
+"Transformer 模型采用自注意力机制，能够并行处理序列，因此在训练速度上优于 RNN。实验表明，Transformer 在机器翻译任务上达到了 SOTA 性能。"
+
+输出:
+```json
+{{
+  "claims": [
+    {{
+      "text": "Transformer 模型采用自注意力机制",
+      "type": "fact",
+      "confidence": 1.0,
+      "evidence_span": [0, 20]
+    }},
+    {{
+      "text": "Transformer 能够并行处理序列",
+      "type": "fact",
+      "confidence": 1.0,
+      "evidence_span": [21, 38]
+    }},
+    {{
+      "text": "Transformer 在训练速度上优于 RNN",
+      "type": "conclusion",
+      "confidence": 0.9,
+      "evidence_span": [39, 60]
+    }},
+    {{
+      "text": "Transformer 在机器翻译任务上达到了 SOTA 性能",
+      "type": "fact",
+      "confidence": 0.95,
+      "evidence_span": [66, 92]
+    }}
+  ],
+  "relations": [
+    {{
+      "source_claim_index": 1,
+      "target_claim_index": 2,
+      "relation_type": "CAUSES",
+      "confidence": 0.85,
+      "evidence": "能够并行处理序列，因此在训练速度上优于"
+    }}
+  ]
+}}
+```
+
+现在请处理上述文本。
+

@@ -1,0 +1,130 @@
+你是一个专业的实体链接专家，擅长将文本中的提及（mention）映射到知识图谱中的概念。
+
+# 任务
+
+判断文本中的提及是否应该链接到候选概念列表中的某个概念。
+
+# 输入信息
+
+## 提及（Mention）
+文本: "{mention_text}"
+上下文: "{context}"
+
+## 候选概念
+{candidates}
+
+# 要求
+
+1. **语义匹配**：
+   - 判断提及与候选概念的语义是否一致
+   - 考虑同义词、缩写、全称/简称等变体
+   - 注意多义词（同一词在不同上下文的含义）
+
+2. **上下文一致性**：
+   - 检查提及的上下文是否与候选概念的描述/领域一致
+   - 考虑共现词、相关概念、使用场景
+
+3. **类型约束**：
+   - 确保候选概念的类型（Person/Method/Tool/Concept）与提及的用法一致
+   - 例如："使用 BERT"中的 BERT 应链接到 Method/Tool，而非 Person
+
+4. **置信度评估**：
+   - 完全匹配（名称相同且上下文吻合）：0.9-1.0
+   - 高度匹配（别名/同义词且上下文吻合）：0.8-0.9
+   - 可能匹配（语义相近但上下文略有偏差）：0.6-0.8
+   - 不确定（语义相关但证据不足）：0.4-0.6
+   - 不匹配：< 0.4
+
+# 输出格式
+
+返回 JSON 对象：
+
+```json
+{{
+  "best_match": {{
+    "concept_id": "候选概念的 ID（如果不匹配则为 null）",
+    "concept_name": "候选概念名称",
+    "confidence": 0.0-1.0,
+    "reason": "匹配原因说明（1-2 句话）"
+  }},
+  "alternative_matches": [
+    {{
+      "concept_id": "备选概念 ID",
+      "concept_name": "备选概念名称",
+      "confidence": 0.0-1.0,
+      "reason": "匹配原因"
+    }}
+  ]
+}}
+```
+
+# 示例 1：完全匹配
+
+提及: "Transformer"
+上下文: "Transformer 模型在 NLP 任务上取得了突破性进展"
+候选:
+1. Transformer (Method) - "基于自注意力机制的神经网络架构"
+2. Transformer (电影) - "变形金刚科幻电影系列"
+
+输出:
+```json
+{{
+  "best_match": {{
+    "concept_id": "concept_001",
+    "concept_name": "Transformer",
+    "confidence": 0.95,
+    "reason": "上下文明确指向 NLP 领域的神经网络模型，与候选 1 的描述完全吻合"
+  }},
+  "alternative_matches": []
+}}
+```
+
+# 示例 2：别名匹配
+
+提及: "BERT"
+上下文: "Google 提出的预训练语言模型 BERT"
+候选:
+1. Bidirectional Encoder Representations from Transformers (Method) - "双向 Transformer 编码器"
+
+输出:
+```json
+{{
+  "best_match": {{
+    "concept_id": "concept_002",
+    "concept_name": "Bidirectional Encoder Representations from Transformers",
+    "confidence": 0.9,
+    "reason": "BERT 是该方法的标准缩写，上下文（预训练、Google）进一步确认"
+  }},
+  "alternative_matches": []
+}}
+```
+
+# 示例 3：不匹配
+
+提及: "attention"
+上下文: "我们需要 pay attention to the results"
+候选:
+1. Attention Mechanism (Method) - "注意力机制，神经网络中的一种计算方式"
+
+输出:
+```json
+{{
+  "best_match": {{
+    "concept_id": null,
+    "concept_name": null,
+    "confidence": 0.2,
+    "reason": "虽然词形相同，但上下文是日常用语（pay attention），而非技术概念"
+  }},
+  "alternative_matches": []
+}}
+```
+
+# 注意事项
+
+- 宁可保守（置信度偏低），不要过度链接
+- 如果多个候选概念得分接近，都列入 alternative_matches
+- 如果所有候选概念置信度 < 0.6，best_match 应为 null
+- reason 应简洁明了，直接说明匹配或不匹配的关键依据
+
+现在请处理上述实体链接任务。
+
