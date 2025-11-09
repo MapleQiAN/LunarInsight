@@ -5,13 +5,13 @@
 """
 
 import os
+import logging
 import numpy as np
 from typing import List, Optional
 from functools import lru_cache
+from openai import OpenAI
 
-
-# 占位符：实际实现需要集成 OpenAI API 或本地模型
-# 这里提供接口定义
+logger = logging.getLogger("graphrag.embedding")
 
 
 def get_embedding(text: str, model: str = "text-embedding-3-small") -> List[float]:
@@ -25,14 +25,39 @@ def get_embedding(text: str, model: str = "text-embedding-3-small") -> List[floa
     Returns:
         向量表示（1536 维）
     """
-    # TODO: 实现 OpenAI API 调用
-    # from openai import OpenAI
-    # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    # response = client.embeddings.create(input=text, model=model)
-    # return response.data[0].embedding
+    if not text or not text.strip():
+        logger.warning("Empty text provided for embedding")
+        return [0.0] * 1536
     
-    # 占位符：返回随机向量
-    return [0.0] * 1536
+    try:
+        # 从环境变量或配置服务获取 API key
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("AI_API_KEY")
+        
+        if not api_key:
+            logger.warning("No OpenAI API key found, returning zero vector")
+            return [0.0] * 1536
+        
+        # 创建 OpenAI 客户端
+        base_url = os.getenv("OPENAI_BASE_URL") or os.getenv("AI_BASE_URL")
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url
+        )
+        
+        # 调用 embeddings API
+        response = client.embeddings.create(
+            input=text,
+            model=model
+        )
+        
+        embedding = response.data[0].embedding
+        logger.debug(f"Generated embedding for text (length={len(text)}, dim={len(embedding)})")
+        return embedding
+        
+    except Exception as e:
+        logger.error(f"Failed to generate embedding: {e}")
+        # 返回零向量作为回退
+        return [0.0] * 1536
 
 
 def batch_embed(
@@ -46,25 +71,77 @@ def batch_embed(
     Args:
         texts: 文本列表
         model: 嵌入模型名称
-        batch_size: 批量大小
+        batch_size: 批量大小（OpenAI API 支持最多 2048 个文本）
     
     Returns:
         向量列表
     """
+    if not texts:
+        return []
+    
     embeddings = []
     
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
+    try:
+        # 从环境变量获取 API key
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("AI_API_KEY")
         
-        # TODO: 批量调用 API
-        # batch_embeddings = [get_embedding(text, model) for text in batch]
+        if not api_key:
+            logger.warning("No OpenAI API key found, returning zero vectors")
+            return [[0.0] * 1536 for _ in texts]
         
-        # 占位符
-        batch_embeddings = [[0.0] * 1536 for _ in batch]
+        # 创建 OpenAI 客户端
+        base_url = os.getenv("OPENAI_BASE_URL") or os.getenv("AI_BASE_URL")
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url
+        )
         
-        embeddings.extend(batch_embeddings)
-    
-    return embeddings
+        # 批量调用 API（OpenAI 支持批量 embedding）
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            
+            # 过滤空文本
+            valid_batch = [(idx, text) for idx, text in enumerate(batch) if text and text.strip()]
+            
+            if not valid_batch:
+                # 如果整个批次都是空文本，返回零向量
+                embeddings.extend([[0.0] * 1536 for _ in batch])
+                continue
+            
+            # 提取有效文本
+            valid_texts = [text for _, text in valid_batch]
+            valid_indices = [idx for idx, _ in valid_batch]
+            
+            try:
+                response = client.embeddings.create(
+                    input=valid_texts,
+                    model=model
+                )
+                
+                # 构建结果映射
+                result_map = {idx: emb.embedding for idx, emb in enumerate(response.data)}
+                
+                # 按原始顺序填充结果
+                batch_embeddings = []
+                for orig_idx in range(len(batch)):
+                    if orig_idx in valid_indices:
+                        result_idx = valid_indices.index(orig_idx)
+                        batch_embeddings.append(result_map[result_idx])
+                    else:
+                        batch_embeddings.append([0.0] * 1536)
+                
+                embeddings.extend(batch_embeddings)
+                
+            except Exception as e:
+                logger.error(f"Failed to generate batch embeddings: {e}")
+                # 回退：为整个批次返回零向量
+                embeddings.extend([[0.0] * 1536 for _ in batch])
+        
+        return embeddings
+        
+    except Exception as e:
+        logger.error(f"Failed to batch embed: {e}")
+        return [[0.0] * 1536 for _ in texts]
 
 
 def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:

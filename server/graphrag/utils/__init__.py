@@ -14,6 +14,17 @@ from server.graphrag.utils.embedding import (
     batch_embed,
     cosine_similarity
 )
+
+# P0 新增工具
+from server.graphrag.utils.evidence_aligner import (
+    align_evidence,
+    extract_evidence_quote
+)
+
+from server.graphrag.utils.claim_deduplicator import (
+    deduplicate_claims,
+    compute_text_hash
+)
 from server.graphrag.utils.validation import (
     validate_chunk,
     validate_claim,
@@ -29,6 +40,11 @@ __all__ = [
     "cosine_similarity",
     "validate_chunk",
     "validate_claim",
-    "validate_concept"
+    "validate_concept",
+    # P0 新增
+    "align_evidence",
+    "extract_evidence_quote",
+    "deduplicate_claims",
+    "compute_text_hash"
 ]
 

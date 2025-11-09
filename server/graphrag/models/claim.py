@@ -32,11 +32,37 @@ class Claim(BaseModel):
     section_path: Optional[str] = Field(None, description="章节路径")
     
     # 类型与置信度
-    claim_type: Literal["fact", "hypothesis", "conclusion"] = Field(
-        ..., 
+    claim_type: Literal["fact", "hypothesis", "conclusion", "definition", "finding", "recommendation"] = Field(
+        default="fact",
         description="论断类型"
     )
     confidence: float = Field(..., description="置信度", ge=0.0, le=1.0)
+    
+    # 新增字段（P0 阶段）
+    modality: Optional[Literal["assertive", "hedged", "speculative"]] = Field(
+        None,
+        description="语气类型：assertive(断言)/hedged(谨慎)/speculative(推测)"
+    )
+    polarity: Optional[Literal["positive", "negative", "neutral"]] = Field(
+        None,
+        description="极性：positive(肯定)/negative(否定)/neutral(中性)"
+    )
+    certainty: Optional[float] = Field(
+        None,
+        description="确定性分数 [0.0-1.0]，考虑不确定性词汇的影响",
+        ge=0.0,
+        le=1.0
+    )
+    
+    # 去重相关字段
+    normalized_text_hash: Optional[str] = Field(
+        None,
+        description="规范化文本的哈希值（用于硬去重）"
+    )
+    canonical_id: Optional[str] = Field(
+        None,
+        description="规范 Claim ID（软聚类后的代表 ID）"
+    )
     
     # 向量化
     embedding: Optional[List[float]] = Field(None, description="向量表示")
