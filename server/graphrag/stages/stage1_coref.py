@@ -110,7 +110,10 @@ class CoreferenceResolver:
         Returns:
             CorefResult: 包含 resolved_text、alias_map、质量指标等
         """
-        logger.debug(f"开始指代消解: chunk_id={chunk.id}")
+        logger.info(f"[Stage1] ========== 开始指代消解 ==========")
+        logger.info(f"[Stage1] Chunk ID: {chunk.id}")
+        logger.info(f"[Stage1] 文本长度: {len(chunk.text)} 字符")
+        logger.debug(f"[Stage1] 文本预览: {chunk.text[:200]}..." if len(chunk.text) > 200 else f"[Stage1] 文本: {chunk.text}")
         
         text = chunk.text
         
@@ -129,9 +132,13 @@ class CoreferenceResolver:
         
         # 1. 检测提及
         mentions = self._detect_mentions(text)
-        logger.debug(f"检测到 {len(mentions)} 个提及")
+        logger.info(f"[Stage1] 检测到 {len(mentions)} 个提及")
+        if mentions:
+            for i, m in enumerate(mentions, 1):
+                logger.info(f"  提及 {i}: '{m.text}' (类型={m.type.value}, 位置={m.position}, 句索引={m.sentence_idx})")
         
         if not mentions:
+            logger.info(f"[Stage1] 未检测到提及，跳过消解")
             return CorefResult(
                 resolved_text=text,
                 alias_map={},
@@ -144,32 +151,72 @@ class CoreferenceResolver:
         
         # 2. 提取括号别名（强约束）
         parenthesis_aliases = self._extract_parenthesis_aliases(text)
+        logger.info(f"[Stage1] 提取到 {len(parenthesis_aliases)} 个括号别名")
+        if parenthesis_aliases:
+            for alias, canonical in parenthesis_aliases.items():
+                logger.info(f"  别名映射: '{alias}' → '{canonical}'")
         
         # 3. 生成候选先行词
         antecedents = self._generate_antecedents(text, mentions)
-        logger.debug(f"生成 {len(antecedents)} 个候选先行词")
+        logger.info(f"[Stage1] 生成 {len(antecedents)} 个候选先行词")
+        if antecedents:
+            # 只显示前10个，避免日志过长
+            display_count = min(10, len(antecedents))
+            for i, ant in enumerate(antecedents[:display_count], 1):
+                logger.info(f"  候选 {i}: '{ant.text}' (位置={ant.position}, 句索引={ant.sentence_idx}, 类型={ant.entity_type})")
+            if len(antecedents) > display_count:
+                logger.info(f"  ... 还有 {len(antecedents) - display_count} 个候选")
         
         # 4. 匹配打分
         matches = self._match_and_score(mentions, antecedents, parenthesis_aliases)
-        logger.debug(f"生成 {len(matches)} 个匹配")
+        logger.info(f"[Stage1] 生成 {len(matches)} 个匹配")
+        if matches:
+            for i, match in enumerate(matches, 1):
+                conflict_mark = " [冲突]" if match.is_conflict else ""
+                logger.info(f"  匹配 {i}: '{match.mention.text}' → '{match.antecedent.text}' "
+                          f"(分数={match.score:.3f}, 置信度={match.confidence:.3f}, "
+                          f"句距={match.sentence_distance}, 证据={match.evidence_type}){conflict_mark}")
         
         # 5. 一致性校验
         validated_matches = self._validate_consistency(matches, parenthesis_aliases)
-        logger.debug(f"一致性校验后剩余 {len(validated_matches)} 个匹配")
+        conflict_count = sum(1 for m in validated_matches if m.is_conflict)
+        logger.info(f"[Stage1] 一致性校验后剩余 {len(validated_matches)} 个匹配 (其中 {conflict_count} 个冲突)")
         
         # 6. 计算质量指标
         coverage, conflict, metrics = self._compute_quality_metrics(
             mentions, validated_matches
         )
+        logger.info(f"[Stage1] 质量指标: 覆盖率={coverage:.2%}, 冲突率={conflict:.2%}")
+        logger.info(f"[Stage1] 分桶统计: 总提及={metrics.get('total_mentions', 0)}, "
+                   f"已消解={metrics.get('resolved_mentions', 0)}, "
+                   f"代词覆盖率={metrics.get('pronoun_coverage', 0):.2%}, "
+                   f"简称覆盖率={metrics.get('abbrev_coverage', 0):.2%}")
         
         # 7. 决策路由
         mode = self._decide_mode(coverage, conflict)
-        logger.info(f"决策模式: {mode}, coverage={coverage:.2f}, conflict={conflict:.2f}")
+        logger.info(f"[Stage1] 决策模式: {mode} (覆盖率={coverage:.2%}, 冲突率={conflict:.2%})")
         
         # 8. 生成产物
         resolved_text, alias_map, provenance = self._generate_artifacts(
             text, validated_matches, mode, parenthesis_aliases
         )
+        logger.info(f"[Stage1] 生成产物: alias_map包含{len(alias_map)}个映射, provenance包含{len(provenance)}条记录")
+        if alias_map:
+            logger.info(f"[Stage1] 别名映射表:")
+            for surface, canonical in alias_map.items():
+                logger.info(f"  '{surface}' → '{canonical}'")
+        if resolved_text and resolved_text != text:
+            logger.info(f"[Stage1] 文本已替换 (原文长度={len(text)}, 替换后长度={len(resolved_text)})")
+            # 显示替换前后的对比（前100字符）
+            preview_len = min(100, len(text))
+            logger.debug(f"[Stage1] 原文预览: {text[:preview_len]}...")
+            logger.debug(f"[Stage1] 替换后预览: {resolved_text[:preview_len]}...")
+        elif resolved_text is None:
+            logger.info(f"[Stage1] 未生成resolved_text (模式={mode})")
+        
+        logger.info(f"[Stage1] ========== 指代消解完成 ==========")
+        logger.info(f"[Stage1] 最终结果: 模式={mode}, 覆盖率={coverage:.2%}, 冲突率={conflict:.2%}, "
+                   f"别名映射数={len(alias_map)}, 证据链数={len(provenance)}")
         
         return CorefResult(
             resolved_text=resolved_text,
@@ -186,19 +233,23 @@ class CoreferenceResolver:
         """判断是否应该跳过（噪声场景）"""
         # 短文本（可能是标题、列表项）
         if len(text.strip()) < 50:
+            logger.debug(f"[Stage1] 跳过: 文本太短 ({len(text.strip())} 字符 < 50)")
             return True
         
         # 表格标记
         if re.search(r'\|.*\|', text) and text.count('|') > 4:
+            logger.debug(f"[Stage1] 跳过: 检测到表格标记 (包含 {text.count('|')} 个 '|')")
             return True
         
         # 代码块标记
         if re.search(r'```|`.*`', text):
+            logger.debug(f"[Stage1] 跳过: 检测到代码块标记")
             return True
         
         # 对话模式（短句 + 引号）
         sentences = re.split(r'[。！？\.\!\?]', text)
         if len(sentences) > 3 and all(len(s.strip()) < 30 for s in sentences[:3]):
+            logger.debug(f"[Stage1] 跳过: 检测到对话模式 (前3句平均长度 < 30)")
             return True
         
         return False
@@ -330,13 +381,17 @@ class CoreferenceResolver:
             candidates = self._get_candidates(mention, antecedents)
             
             if not candidates:
+                logger.debug(f"[Stage1] 提及 '{mention.text}' 无候选先行词")
                 continue
+            
+            logger.debug(f"[Stage1] 提及 '{mention.text}' 有 {len(candidates)} 个候选先行词")
             
             # 为每个候选打分
             scored_candidates = []
             for candidate in candidates:
                 score = self._score_match(mention, candidate, parenthesis_aliases)
                 scored_candidates.append((candidate, score))
+                logger.debug(f"    候选 '{candidate.text}': 分数={score:.3f}")
             
             # 排序，取 Top-K
             scored_candidates.sort(key=lambda x: x[1], reverse=True)
@@ -348,13 +403,15 @@ class CoreferenceResolver:
                 scores = [s for _, s in top_candidates[:3]]
                 if scores[0] - scores[2] < 0.1:  # 分差小于 0.1
                     is_multi_solution = True
+                    logger.debug(f"    多解风险: 前三名分差={scores[0] - scores[2]:.3f} < 0.1")
             
             # 生成匹配（只取通过阈值的）
             min_score = 0.3  # 最低分数阈值
+            valid_matches = []
             for candidate, score in top_candidates:
                 if score >= min_score:
                     sentence_distance = abs(mention.sentence_idx - candidate.sentence_idx)
-                    matches.append(Match(
+                    match = Match(
                         mention=mention,
                         antecedent=candidate,
                         score=score,
@@ -362,7 +419,14 @@ class CoreferenceResolver:
                         evidence_type=self._get_evidence_type(mention, candidate, parenthesis_aliases),
                         sentence_distance=sentence_distance,
                         is_conflict=is_multi_solution
-                    ))
+                    )
+                    matches.append(match)
+                    valid_matches.append((candidate.text, score))
+                else:
+                    logger.debug(f"    候选 '{candidate.text}' 分数 {score:.3f} < 阈值 {min_score}，跳过")
+            
+            if valid_matches:
+                logger.debug(f"    有效匹配: {valid_matches}")
         
         return matches
     
@@ -548,6 +612,7 @@ class CoreferenceResolver:
     ) -> List[Match]:
         """一致性校验"""
         validated = []
+        alias_conflicts = 0
         
         # 1. 别名一致性：括号别名必须一致
         alias_map = {}  # {mention_text: canonical}
@@ -556,12 +621,19 @@ class CoreferenceResolver:
                 canonical = parenthesis_aliases[match.mention.text]
                 if match.mention.text not in alias_map:
                     alias_map[match.mention.text] = canonical
+                    logger.debug(f"[Stage1] 别名一致性: '{match.mention.text}' → '{canonical}'")
                 elif alias_map[match.mention.text] != canonical:
                     # 冲突：跳过此匹配
                     match.is_conflict = True
+                    alias_conflicts += 1
+                    logger.debug(f"[Stage1] 别名冲突: '{match.mention.text}' 已映射到 '{alias_map[match.mention.text]}', "
+                               f"但匹配到 '{canonical}', 标记为冲突")
                     continue
             
             validated.append(match)
+        
+        if alias_conflicts > 0:
+            logger.debug(f"[Stage1] 别名一致性校验: 发现 {alias_conflicts} 个冲突")
         
         # 2. 窗口内一致性（简化版：同一提及在同一窗口应指向同一先行词）
         # 按提及文本分组
@@ -574,17 +646,26 @@ class CoreferenceResolver:
         
         # 检查每组内的冲突
         final_validated = []
+        window_conflicts = 0
         for key, group in mention_groups.items():
             if len(group) == 1:
                 final_validated.append(group[0])
             else:
                 # 多个匹配：选择分数最高的，其他标记为冲突
                 group.sort(key=lambda m: m.score, reverse=True)
-                final_validated.append(group[0])
+                best_match = group[0]
+                final_validated.append(best_match)
+                logger.debug(f"[Stage1] 窗口一致性: 提及 '{key}' 有 {len(group)} 个匹配, "
+                           f"选择最高分 '{best_match.antecedent.text}' (分数={best_match.score:.3f})")
                 # 其他标记为冲突（但不丢弃，用于计算冲突率）
                 for m in group[1:]:
                     m.is_conflict = True
+                    window_conflicts += 1
                     final_validated.append(m)
+                    logger.debug(f"[Stage1]  标记冲突: '{m.antecedent.text}' (分数={m.score:.3f})")
+        
+        if window_conflicts > 0:
+            logger.debug(f"[Stage1] 窗口一致性校验: 发现 {window_conflicts} 个冲突")
         
         return final_validated
     
@@ -635,24 +716,41 @@ class CoreferenceResolver:
         """决策路由"""
         gates = self.quality_gates
         
+        logger.debug(f"[Stage1] 决策路由: 覆盖率={coverage:.2%}, 冲突率={conflict:.2%}")
+        
         # rewrite 模式
         rewrite_coverage_min = gates.get("rewrite_coverage_min", 0.6)
         rewrite_conflict_max = gates.get("rewrite_conflict_max", 0.15)
+        logger.debug(f"  检查 rewrite 模式: 需要覆盖率>={rewrite_coverage_min:.2%} 且 冲突率<={rewrite_conflict_max:.2%}")
         if coverage >= rewrite_coverage_min and conflict <= rewrite_conflict_max:
+            logger.debug(f"  ✓ 满足 rewrite 条件")
             return "rewrite"
+        else:
+            logger.debug(f"  ✗ 不满足 rewrite 条件 (覆盖率{'满足' if coverage >= rewrite_coverage_min else '不足'}, "
+                       f"冲突率{'满足' if conflict <= rewrite_conflict_max else '过高'})")
         
         # local 模式
         local_coverage_min = gates.get("local_coverage_min", 0.3)
         local_conflict_max = gates.get("local_conflict_max", 0.25)
+        logger.debug(f"  检查 local 模式: 需要覆盖率>={local_coverage_min:.2%} 且 冲突率<={local_conflict_max:.2%}")
         if coverage >= local_coverage_min and conflict <= local_conflict_max:
+            logger.debug(f"  ✓ 满足 local 条件")
             return "local"
+        else:
+            logger.debug(f"  ✗ 不满足 local 条件 (覆盖率{'满足' if coverage >= local_coverage_min else '不足'}, "
+                       f"冲突率{'满足' if conflict <= local_conflict_max else '过高'})")
         
         # alias_only 模式
         alias_only_coverage_min = gates.get("alias_only_coverage_min", 0.1)
+        logger.debug(f"  检查 alias_only 模式: 需要覆盖率>={alias_only_coverage_min:.2%}")
         if coverage >= alias_only_coverage_min:
+            logger.debug(f"  ✓ 满足 alias_only 条件")
             return "alias_only"
+        else:
+            logger.debug(f"  ✗ 不满足 alias_only 条件 (覆盖率不足)")
         
         # skip 模式
+        logger.debug(f"  → 选择 skip 模式")
         return "skip"
     
     def _generate_artifacts(
