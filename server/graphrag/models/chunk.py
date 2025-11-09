@@ -44,6 +44,10 @@ class ChunkMetadata(BaseModel):
         None, 
         description="指代消解产生的别名映射 {代词: 实体名}"
     )
+    coref_mode: Optional[str] = Field(
+        None,
+        description="指代消解决策模式：rewrite/local/alias_only/skip"
+    )
     
     # 时间戳
     created_at: datetime = Field(default_factory=datetime.utcnow)
