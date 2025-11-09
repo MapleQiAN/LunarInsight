@@ -4,7 +4,7 @@
 优化版本：多路召回 + 精排 + NIL 检测
 - 别名词典召回（复用 stage1 的 alias_map）
 - BM25 + 向量检索候选生成
-- 5 特征精排（词形、语义、上下文、类型、频次）
+- 5维特征精排（词形、语义、上下文、类型、频次）
 - NIL 检测与新概念创建
 - 分类型阈值（Person/Organization vs Method/Tool）
 """
@@ -752,6 +752,10 @@ class EntityLinker:
         Returns:
             排序后的候选列表
         """
+        logger.debug(
+            f"[Stage2] 开始精排: mention='{mention}', candidates={len(candidates)}"
+        )
+        
         for candidate in candidates:
             # 计算 6 类特征（新增图一致性特征）
             features = {
@@ -765,23 +769,52 @@ class EntityLinker:
             candidate.features = features
             
             # 加权求和得到总分
+            weights = {
+                "lexical_similarity": self.ranking_weights.get("lexical_similarity", 0.15),
+                "semantic_similarity": self.ranking_weights.get("semantic_similarity", 0.35),
+                "context_match": self.ranking_weights.get("context_match", 0.15),
+                "type_consistency": self.ranking_weights.get("type_consistency", 0.1),
+                "prior_frequency": self.ranking_weights.get("prior_frequency", 0.1),
+                "graph_consistency": self.ranking_weights.get("graph_consistency", 0.15)
+            }
+            
             score = (
-                features["lexical_similarity"] * self.ranking_weights.get("lexical_similarity", 0.15) +
-                features["semantic_similarity"] * self.ranking_weights.get("semantic_similarity", 0.35) +
-                features["context_match"] * self.ranking_weights.get("context_match", 0.15) +
-                features["type_consistency"] * self.ranking_weights.get("type_consistency", 0.1) +
-                features["prior_frequency"] * self.ranking_weights.get("prior_frequency", 0.1) +
-                features["graph_consistency"] * self.ranking_weights.get("graph_consistency", 0.15)
+                features["lexical_similarity"] * weights["lexical_similarity"] +
+                features["semantic_similarity"] * weights["semantic_similarity"] +
+                features["context_match"] * weights["context_match"] +
+                features["type_consistency"] * weights["type_consistency"] +
+                features["prior_frequency"] * weights["prior_frequency"] +
+                features["graph_consistency"] * weights["graph_consistency"]
             )
             
             # 应用反馈学习：根据错误链接模式调整分数
             penalty = self._apply_feedback_learning(candidate, mention, chunk.id)
+            score_before_penalty = score
             score = score * (1.0 - penalty)
             
             candidate.score = score
+            
+            logger.debug(
+                f"[Stage2] 候选 '{candidate.concept_name}' (id={candidate.concept_id}):\n"
+                f"  特征: lexical={features['lexical_similarity']:.3f}, "
+                f"semantic={features['semantic_similarity']:.3f}, "
+                f"context={features['context_match']:.3f}, "
+                f"type={features['type_consistency']:.3f}, "
+                f"frequency={features['prior_frequency']:.3f}, "
+                f"graph={features['graph_consistency']:.3f}\n"
+                f"  权重: {weights}\n"
+                f"  得分: {score_before_penalty:.3f} -> {score:.3f} "
+                f"(penalty={penalty:.3f}, match_type={candidate.match_type})"
+            )
         
         # 按分数降序排序
         ranked = sorted(candidates, key=lambda x: x.score, reverse=True)
+        
+        top3_scores = [f"{c.concept_name}:{c.score:.3f}" for c in ranked[:3]]
+        logger.debug(
+            f"[Stage2] 精排完成: top-3 候选分数 = {top3_scores}"
+        )
+        
         return ranked
     
     def _compute_lexical_similarity(self, mention: str, concept_name: str, aliases: List[str]) -> float:
@@ -953,8 +986,16 @@ class EntityLinker:
         if result:
             degree = result[0].get("degree", 0)
             # 归一化到 [0, 1]（假设最大连接数为 100）
-            return min(degree / 100.0, 1.0)
+            score = min(degree / 100.0, 1.0)
+            logger.debug(
+                f"[Stage2] 先验频次: '{candidate.concept_name}' degree={degree}, "
+                f"归一化分数={score:.3f}"
+            )
+            return score
         
+        logger.debug(
+            f"[Stage2] 先验频次: '{candidate.concept_name}' 未找到连接，返回 0.0"
+        )
         return 0.0
     
     def _compute_graph_consistency(self, candidate: EntityCandidate, chunk: ChunkMetadata) -> float:
@@ -971,6 +1012,11 @@ class EntityLinker:
             一致性分数 [0, 1]
         """
         try:
+            logger.debug(
+                f"[Stage2] 计算图一致性: candidate='{candidate.concept_name}' "
+                f"(id={candidate.concept_id}), chunk_id={chunk.id}"
+            )
+            
             # 1. 查询 candidate 所属的主题社区
             candidate_theme_query = """
             MATCH (c:Concept {id: $concept_id})<-[:HAS_MEMBER]-(t:Theme)
@@ -986,9 +1032,17 @@ class EntityLinker:
             
             if not candidate_themes:
                 # 如果 candidate 没有主题社区，返回中等分数
+                logger.debug(
+                    f"[Stage2] candidate '{candidate.concept_name}' 没有主题社区，返回默认分数 0.5"
+                )
                 return 0.5
             
             candidate_theme_ids = {record.get("theme_id") for record in candidate_themes}
+            candidate_theme_labels = [record.get("theme_label", "") for record in candidate_themes]
+            logger.debug(
+                f"[Stage2] candidate 主题社区: {len(candidate_themes)} 个, "
+                f"ids={list(candidate_theme_ids)}, labels={candidate_theme_labels}"
+            )
             
             # 2. 查询 chunk 中其他已链接的实体（通过 MENTIONS 关系）
             chunk_entities_query = """
@@ -1009,33 +1063,56 @@ class EntityLinker:
             
             if not chunk_themes:
                 # 如果 chunk 中没有其他实体，返回中等分数
+                logger.debug(
+                    f"[Stage2] chunk {chunk.id} 中没有其他已链接实体的主题社区，返回默认分数 0.5"
+                )
                 return 0.5
             
             chunk_theme_ids = {record.get("theme_id") for record in chunk_themes}
+            chunk_theme_labels = [record.get("theme_label", "") for record in chunk_themes]
+            logger.debug(
+                f"[Stage2] chunk 中其他实体的主题社区: {len(chunk_themes)} 个, "
+                f"ids={list(chunk_theme_ids)}, labels={chunk_theme_labels}"
+            )
             
             # 3. 计算主题社区重叠度
             overlap = len(candidate_theme_ids & chunk_theme_ids)
             total_unique = len(candidate_theme_ids | chunk_theme_ids)
+            overlap_ids = list(candidate_theme_ids & chunk_theme_ids)
+            
+            logger.debug(
+                f"[Stage2] 主题重叠计算: 重叠数={overlap}, 总唯一数={total_unique}, "
+                f"重叠主题IDs={overlap_ids}"
+            )
             
             if total_unique > 0:
                 # Jaccard 相似度：重叠度 / 总唯一主题数
                 jaccard = overlap / total_unique
+                logger.debug(f"[Stage2] Jaccard 相似度: {jaccard:.3f}")
                 
                 # 如果完全重叠，给高分
                 if overlap > 0:
                     consistency_score = 0.7 + 0.3 * jaccard  # [0.7, 1.0]
+                    logger.debug(
+                        f"[Stage2] 有主题重叠，计算得分: base=0.7, jaccard_weight=0.3*{jaccard:.3f}, "
+                        f"最终得分={consistency_score:.3f}"
+                    )
                 else:
                     # 无重叠，但检查是否有相关的主题（通过主题关键词）
+                    logger.debug(
+                        f"[Stage2] 无直接主题重叠，检查关键词重叠..."
+                    )
                     consistency_score = self._check_theme_keyword_overlap(
                         candidate_themes, chunk_themes
                     )
                 
                 logger.debug(
-                    f"[Stage2] 图一致性: '{candidate.concept_name}' "
+                    f"[Stage2] 图一致性最终得分: '{candidate.concept_name}' "
                     f"主题重叠={overlap}/{total_unique}, score={consistency_score:.3f}"
                 )
                 return consistency_score
             
+            logger.debug(f"[Stage2] total_unique=0，返回默认分数 0.5")
             return 0.5
         except Exception as e:
             logger.debug(f"[Stage2] 计算图一致性失败: {e}")
@@ -1057,6 +1134,11 @@ class EntityLinker:
             相似度分数 [0, 1]
         """
         try:
+            logger.debug(
+                f"[Stage2] 检查主题关键词重叠: candidate_themes={len(candidate_themes)}, "
+                f"chunk_themes={len(chunk_themes)}"
+            )
+            
             # 提取主题标签中的关键词
             candidate_keywords = set()
             for theme in candidate_themes:
@@ -1073,17 +1155,39 @@ class EntityLinker:
                     keywords = re.findall(r'\w+', label.lower())
                     chunk_keywords.update(keywords)
             
+            logger.debug(
+                f"[Stage2] 提取关键词: candidate={len(candidate_keywords)} 个 "
+                f"({list(candidate_keywords)[:10]}), chunk={len(chunk_keywords)} 个 "
+                f"({list(chunk_keywords)[:10]})"
+            )
+            
             if not candidate_keywords or not chunk_keywords:
+                logger.debug(
+                    f"[Stage2] 关键词为空，返回默认分数 0.4 "
+                    f"(candidate={len(candidate_keywords)}, chunk={len(chunk_keywords)})"
+                )
                 return 0.4
             
             # 计算关键词重叠度
             overlap = len(candidate_keywords & chunk_keywords)
             total = len(candidate_keywords | chunk_keywords)
+            overlap_keywords = list(candidate_keywords & chunk_keywords)
+            
+            logger.debug(
+                f"[Stage2] 关键词重叠: 重叠数={overlap}, 总唯一数={total}, "
+                f"重叠关键词={overlap_keywords[:10]}"
+            )
             
             if total > 0:
                 keyword_similarity = overlap / total
-                return 0.4 + 0.2 * keyword_similarity  # [0.4, 0.6]
+                score = 0.4 + 0.2 * keyword_similarity  # [0.4, 0.6]
+                logger.debug(
+                    f"[Stage2] 关键词相似度: {keyword_similarity:.3f}, "
+                    f"最终得分={score:.3f} (base=0.4, weight=0.2*{keyword_similarity:.3f})"
+                )
+                return score
             
+            logger.debug(f"[Stage2] total=0，返回默认分数 0.4")
             return 0.4
             
         except Exception as e:
