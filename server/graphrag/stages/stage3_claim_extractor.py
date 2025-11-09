@@ -17,6 +17,7 @@ from server.services.config_service import config_service
 from server.infra.ai_providers import AIProviderFactory
 from server.graphrag.utils.evidence_aligner import align_evidence
 from server.graphrag.utils.claim_deduplicator import deduplicate_claims, compute_text_hash
+from server.graphrag.utils.nli_verifier import NLIVerifier
 
 logger = logging.getLogger("graphrag.stage3")
 
@@ -61,19 +62,31 @@ class ClaimExtractor:
         except Exception as e:
             logger.warning(f"Failed to initialize AI client: {e}, using mock mode")
         
-        logger.info("ClaimExtractor initialized")
+        # 初始化 NLI 验证器（P2 优化）
+        self.nli_verifier = NLIVerifier(client=self.client)
+        
+        logger.info("ClaimExtractor initialized (P2: NLI verification enabled)")
     
-    def extract(self, chunk: ChunkMetadata) -> Tuple[List[Claim], List[ClaimRelation]]:
+    def extract(
+        self, 
+        chunk: ChunkMetadata,
+        adjacent_chunks: Optional[List[ChunkMetadata]] = None
+    ) -> Tuple[List[Claim], List[ClaimRelation]]:
         """
-        从 Chunk 中抽取论断与关系
+        从 Chunk 中抽取论断与关系（P2 优化版本）
         
         Args:
             chunk: 输入 Chunk
+            adjacent_chunks: 相邻 Chunks（用于篇章感知预处理，可选）
         
         Returns:
             (claims, relations)
         """
         logger.debug(f"开始论断抽取: chunk_id={chunk.id}")
+        
+        # P2 优化：篇章感知预处理 - 复用 stage0 结果
+        # 如果有相邻 chunks，构建上下文增强的文本
+        context_text = self._build_context_aware_text(chunk, adjacent_chunks)
         
         # 根据 coref_mode 决定是否使用 resolved_text
         # 规范：local/alias_only 模式禁止使用替换后的文本，避免污染下游
@@ -89,8 +102,9 @@ class ClaimExtractor:
             return [], []
         
         try:
-            # 1. 构造 Prompt
-            prompt = self.prompt_template.format(text=text)
+            # 1. 构造 Prompt（P2：使用上下文增强的文本）
+            prompt_text = context_text if context_text else text
+            prompt = self.prompt_template.format(text=prompt_text)
             
             # 2. 调用 LLM
             messages = [
@@ -155,6 +169,34 @@ class ClaimExtractor:
                 polarity = self._detect_polarity(claim_text)
                 certainty = self._compute_certainty(claim_text, adjusted_confidence, modality)
                 
+                # P2 优化：多头验证 - NLI 验证 + 不确定性检测
+                nli_result = self.nli_verifier.verify_claim(
+                    claim_text=claim_text,
+                    source_text=text,
+                    max_retries=2  # 多头验证：2次调用
+                )
+                
+                # 根据 NLI 结果调整置信度
+                if nli_result["label"] == "entailment":
+                    # 论断可以从原文推理出来，提高置信度
+                    adjusted_confidence = min(1.0, adjusted_confidence * 1.1)
+                elif nli_result["label"] == "contradiction":
+                    # 论断与原文矛盾，大幅降低置信度
+                    adjusted_confidence = adjusted_confidence * 0.5
+                elif nli_result["label"] == "neutral":
+                    # 无法确定，略微降低置信度
+                    adjusted_confidence = adjusted_confidence * 0.9
+                
+                # 更新 certainty（考虑 NLI 验证结果）
+                nli_confidence = nli_result.get("confidence", 0.5)
+                certainty = (certainty + nli_confidence) / 2.0
+                
+                logger.debug(
+                    f"论断验证: claim='{claim_text[:50]}...', "
+                    f"NLI={nli_result['label']}({nli_confidence:.2f}), "
+                    f"最终置信度={adjusted_confidence:.2f}"
+                )
+                
                 # 4.3 计算规范化文本哈希（用于去重）
                 normalized_text_hash = compute_text_hash(claim_text)
                 
@@ -186,7 +228,7 @@ class ClaimExtractor:
                 if merged_map:
                     logger.info(f"去重完成: 合并了 {sum(len(v) for v in merged_map.values())} 个重复/相似论断")
             
-            # 5. 构造 ClaimRelation 对象
+            # 5. 构造 ClaimRelation 对象（P2 优化：NLI 验证）
             relations = []
             for raw_rel in raw_relations:
                 source_idx = raw_rel.get("source_claim_index", -1)
@@ -198,21 +240,58 @@ class ClaimExtractor:
                 source_claim = claims[source_idx]
                 target_claim = claims[target_idx]
                 
+                # P2 优化：NLI 验证关系
+                relation_type = raw_rel.get("relation_type", "SUPPORTS")
+                base_confidence = raw_rel.get("confidence", 0.7)
+                
+                # 使用 NLI 验证关系是否正确
+                relation_context = raw_rel.get("evidence") or text
+                nli_relation_result = self.nli_verifier.verify_relation(
+                    source_claim=source_claim.text,
+                    target_claim=target_claim.text,
+                    relation_type=relation_type,
+                    context=relation_context,
+                    max_retries=2  # 多头验证
+                )
+                
+                # 根据 NLI 验证结果调整关系置信度
+                if nli_relation_result["is_valid"]:
+                    # 关系有效，提高置信度
+                    final_confidence = min(1.0, base_confidence * 1.1)
+                else:
+                    # 关系无效，降低置信度
+                    final_confidence = base_confidence * 0.6
+                
+                # 如果置信度太低，跳过该关系
+                if final_confidence < 0.4:
+                    logger.debug(
+                        f"跳过低置信度关系: {source_claim.text[:30]}... -> "
+                        f"{target_claim.text[:30]}... ({relation_type}), "
+                        f"置信度={final_confidence:.2f}"
+                    )
+                    continue
+                
                 rel_id = hashlib.sha256(
-                    f"{source_claim.id}:{target_claim.id}:{raw_rel.get('relation_type', '')}".encode()
+                    f"{source_claim.id}:{target_claim.id}:{relation_type}".encode()
                 ).hexdigest()[:16]
                 
                 relation = ClaimRelation(
                     id=f"rel_{rel_id}",
                     source_claim_id=source_claim.id,
                     target_claim_id=target_claim.id,
-                    relation_type=raw_rel.get("relation_type", "SUPPORTS"),
-                    confidence=raw_rel.get("confidence", 0.7),
+                    relation_type=relation_type,
+                    confidence=final_confidence,
                     strength=raw_rel.get("strength"),
                     evidence=raw_rel.get("evidence"),
                     build_version=chunk.build_version
                 )
                 relations.append(relation)
+                
+                logger.debug(
+                    f"关系验证: {relation_type}, "
+                    f"NLI有效={nli_relation_result['is_valid']}, "
+                    f"最终置信度={final_confidence:.2f}"
+                )
             
             logger.info(f"论断抽取完成: chunk_id={chunk.id}, claims={len(claims)}, relations={len(relations)}")
             return claims, relations
@@ -326,6 +405,64 @@ class ClaimExtractor:
         
         # 确保在有效范围内
         return max(0.0, min(1.0, certainty))
+    
+    def _build_context_aware_text(
+        self,
+        chunk: ChunkMetadata,
+        adjacent_chunks: Optional[List[ChunkMetadata]]
+    ) -> Optional[str]:
+        """
+        P2 优化：篇章感知预处理 - 复用 stage0 结果
+        
+        构建包含相邻 chunk 上下文的增强文本
+        
+        Args:
+            chunk: 当前 Chunk
+            adjacent_chunks: 相邻 Chunks（前一个和后一个）
+        
+        Returns:
+            增强后的文本（如果提供了相邻 chunks），否则返回 None
+        """
+        if not adjacent_chunks:
+            return None
+        
+        # 构建上下文文本
+        context_parts = []
+        
+        # 前一个 chunk（如果有）
+        prev_chunks = [c for c in adjacent_chunks if c.chunk_index < chunk.chunk_index]
+        if prev_chunks:
+            prev_chunk = max(prev_chunks, key=lambda c: c.chunk_index)
+            use_prev_resolved = (
+                prev_chunk.resolved_text and 
+                prev_chunk.coref_mode == "rewrite"
+            )
+            prev_text = prev_chunk.resolved_text if use_prev_resolved else prev_chunk.text
+            context_parts.append(f"[前文上下文]\n{prev_text[-200:]}\n")  # 只取最后200字符
+        
+        # 当前 chunk
+        use_resolved = (
+            chunk.resolved_text and 
+            chunk.coref_mode == "rewrite"
+        )
+        current_text = chunk.resolved_text if use_resolved else chunk.text
+        context_parts.append(f"[当前文本]\n{current_text}\n")
+        
+        # 后一个 chunk（如果有）
+        next_chunks = [c for c in adjacent_chunks if c.chunk_index > chunk.chunk_index]
+        if next_chunks:
+            next_chunk = min(next_chunks, key=lambda c: c.chunk_index)
+            use_next_resolved = (
+                next_chunk.resolved_text and 
+                next_chunk.coref_mode == "rewrite"
+            )
+            next_text = next_chunk.resolved_text if use_next_resolved else next_chunk.text
+            context_parts.append(f"[后文上下文]\n{next_text[:200]}\n")  # 只取前200字符
+        
+        enhanced_text = "\n".join(context_parts)
+        logger.debug(f"篇章感知预处理: chunk_id={chunk.id}, 上下文长度={len(enhanced_text)}")
+        
+        return enhanced_text
     
     def _default_prompt(self) -> str:
         """默认 Prompt 模板"""
