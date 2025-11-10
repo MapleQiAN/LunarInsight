@@ -50,15 +50,21 @@ class SemanticChunker:
         
         # 3. 构建 Chunk 对象
         chunks = []
-        for i, (window_text, start_idx, end_idx) in enumerate(windows):
+        chunk_index = 0
+        for window_text, start_idx, end_idx in windows:
+            # 过滤过短的窗口（ChunkMetadata 要求 text 至少 50 个字符）
+            if len(window_text.strip()) < 50:
+                logger.debug(f"跳过过短的窗口: length={len(window_text)}, text={window_text[:50]}...")
+                continue
+            
             # 生成句子 ID
             sentence_ids = [f"{doc_id}:s{j}" for j in range(start_idx, end_idx + 1)]
             
             chunk = ChunkMetadata(
-                id=f"{doc_id}:{i}",
+                id=f"{doc_id}:{chunk_index}",
                 doc_id=doc_id,
                 text=window_text,
-                chunk_index=i,
+                chunk_index=chunk_index,
                 sentence_ids=sentence_ids,
                 sentence_count=len(sentence_ids),
                 window_start=start_idx,
@@ -66,6 +72,7 @@ class SemanticChunker:
                 build_version=build_version
             )
             chunks.append(chunk)
+            chunk_index += 1
         
         logger.info(f"切分完成: 生成 {len(chunks)} 个 Chunk")
         return chunks
