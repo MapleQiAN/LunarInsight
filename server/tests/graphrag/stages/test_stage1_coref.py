@@ -208,7 +208,7 @@ def test_coref_decision_modes():
     chunk_low = ChunkMetadata(
         id="test_doc:4",
         doc_id="test_doc",
-        text="这是一个简单的测试文本。它包含一些基本内容。文本内容相对简单，没有复杂的指代关系。",
+        text="这是一个简单的测试文本。它包含一些基本内容。文本内容相对简单，没有复杂的指代关系。这种情况通常不会触发重写模式。",
         chunk_index=4,
         sentence_ids=["test_doc:s0", "test_doc:s1"],
         sentence_count=2,
