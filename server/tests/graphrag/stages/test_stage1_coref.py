@@ -15,8 +15,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from server.graphrag.stages.stage1_coref import CoreferenceResolver, CorefResult
-from server.graphrag.models.chunk import ChunkMetadata
+from graphrag.stages.stage1_coref import CoreferenceResolver, CorefResult
+from graphrag.models.chunk import ChunkMetadata
 
 # 配置日志以显示详细步骤
 logging.basicConfig(
