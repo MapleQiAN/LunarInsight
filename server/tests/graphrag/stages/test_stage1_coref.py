@@ -104,12 +104,26 @@ def test_coref_basic():
     # 打印结果
     print_result(result)
     
-    # 断言
+    # 断言：基本类型检查
     assert isinstance(result, CorefResult), "应该返回 CorefResult"
     assert result.mode in ["rewrite", "local", "alias_only", "skip"], "模式应该是有效值"
     assert 0.0 <= result.coverage <= 1.0, "覆盖率应该在 [0, 1] 范围内"
     assert 0.0 <= result.conflict <= 1.0, "冲突率应该在 [0, 1] 范围内"
     assert isinstance(result.alias_map, dict), "alias_map 应该是字典"
+    
+    # 断言：功能验证
+    # 测试文本包含"人工智能（AI）"，应该提取到括号别名
+    assert "AI" in result.alias_map or "人工智能" in result.alias_map.values(), \
+        f"应该提取到括号别名 'AI' → '人工智能'，但 alias_map={result.alias_map}"
+    
+    # 测试文本包含"它"这个代词，应该被检测到
+    assert result.metrics.get("total_mentions", 0) > 0, \
+        f"应该检测到至少一个提及（文本中有'它'），但 total_mentions={result.metrics.get('total_mentions', 0)}"
+    
+    # 如果检测到提及，覆盖率不应该为0（除非所有匹配都失败）
+    if result.metrics.get("total_mentions", 0) > 0:
+        assert result.coverage > 0.0 or result.mode == "skip", \
+            f"检测到提及但覆盖率为0且模式不是skip，说明匹配失败。coverage={result.coverage:.2%}, mode={result.mode}"
     
     print(f"\n✓ 测试通过: 基本指代消解功能正常")
 
