@@ -271,8 +271,22 @@ class CoreferenceResolver:
             if sent_start == -1:
                 continue
             
-            # 检测代词
-            for pronoun in pronouns_zh + pronouns_en:
+            # 检测代词（中文不使用单词边界，英文使用）
+            for pronoun in pronouns_zh:
+                # 中文代词直接匹配，不使用 \b（因为中文没有空格分隔）
+                pattern = re.escape(pronoun)
+                for match in re.finditer(pattern, sentence):
+                    pos = sent_start + match.start()
+                    mentions.append(Mention(
+                        text=pronoun,
+                        type=MentionType.PRONOUN,
+                        position=pos,
+                        sentence_idx=sent_idx,
+                        span=(pos, pos + len(pronoun))
+                    ))
+            
+            for pronoun in pronouns_en:
+                # 英文代词使用单词边界
                 pattern = r'\b' + re.escape(pronoun) + r'\b'
                 for match in re.finditer(pattern, sentence, re.IGNORECASE):
                     pos = sent_start + match.start()
