@@ -1,7 +1,12 @@
-# LunarInsight | 月悟
+# 月悟 | LunarInsight
 
 > **A quiet knowledge graph engine for insight.**  
-> 在静夜中沉淀知识、联结万象、点亮顿悟。
+> 在静夜中沉淀知识、联结万象、点亮顿悟。月月一悟，书写你的知光之路。
+>
+> <br>
+>
+> **月落心海织星图，知光点点照书途；**
+>  **月圆一悟开幽梦，书卷回眸拾旧初。**
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org)
