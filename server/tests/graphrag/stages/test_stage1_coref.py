@@ -335,12 +335,12 @@ def test_coref_demonstrative():
     chunk = ChunkMetadata(
         id="test_doc:9",
         doc_id="test_doc",
-        text="机器学习是人工智能的核心技术。该方法通过算法从数据中学习模式。此技术已经在多个领域得到应用。",
+        text="机器学习是人工智能的核心技术。该方法通过算法从数据中学习模式。此技术已经在多个领域得到应用，其发展前景非常广阔。",
         chunk_index=9,
-        sentence_ids=["test_doc:s0", "test_doc:s1", "test_doc:s2"],
-        sentence_count=3,
+        sentence_ids=["test_doc:s0", "test_doc:s1", "test_doc:s2", "test_doc:s3"],
+        sentence_count=4,
         window_start=0,
-        window_end=2,
+        window_end=3,
         build_version="test_001"
     )
     
