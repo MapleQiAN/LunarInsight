@@ -248,7 +248,8 @@ class CoreferenceResolver:
         
         # 对话模式（短句 + 引号）
         sentences = re.split(r'[。！？\.\!\?]', text)
-        if len(sentences) > 3 and all(len(s.strip()) < 30 for s in sentences[:3]):
+        sentences = [s.strip() for s in sentences if s.strip()]  # 过滤空字符串
+        if len(sentences) > 3 and all(len(s) < 30 for s in sentences[:3]):
             logger.debug(f"[Stage1] 跳过: 检测到对话模式 (前3句平均长度 < 30)")
             return True
         
