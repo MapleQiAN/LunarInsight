@@ -87,7 +87,7 @@ def test_coref_basic():
     chunk = ChunkMetadata(
         id="test_doc:0",
         doc_id="test_doc",
-        text="人工智能（AI）是一种模拟人类智能的技术。它能够处理复杂的任务。AI 在多个领域都有应用。",
+        text="人工智能（AI）是一种模拟人类智能的技术。它能够处理复杂的任务。AI 在多个领域都有应用，包括医疗、金融、教育等行业。",
         chunk_index=0,
         sentence_ids=["test_doc:s0", "test_doc:s1", "test_doc:s2"],
         sentence_count=3,
@@ -208,7 +208,7 @@ def test_coref_decision_modes():
     chunk_low = ChunkMetadata(
         id="test_doc:4",
         doc_id="test_doc",
-        text="这是一个简单的测试文本。它包含一些基本内容。",
+        text="这是一个简单的测试文本。它包含一些基本内容。文本内容相对简单，没有复杂的指代关系。",
         chunk_index=4,
         sentence_ids=["test_doc:s0", "test_doc:s1"],
         sentence_count=2,
@@ -267,8 +267,8 @@ def test_coref_skip_noise():
     
     resolver = CoreferenceResolver()
     
-    # 测试短文本
-    chunk_short = ChunkMetadata(
+    # 测试短文本（使用 model_construct 绕过验证，因为这是测试边界情况）
+    chunk_short = ChunkMetadata.model_construct(
         id="test_doc:6",
         doc_id="test_doc",
         text="短文本。",
