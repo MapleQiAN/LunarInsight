@@ -79,15 +79,31 @@ def test_chunker_empty_text():
 
 
 def test_chunker_short_text():
-    """测试短文本处理"""
+    """测试短文本处理（过短的文本会被过滤）"""
     chunker = SemanticChunker()
     
+    # 使用短文本（少于 50 个字符）
     text = "这是一个很短的文本。"
     chunks = chunker.split("doc1", text, "v1")
     
-    # 短文本可能只生成一个 Chunk 或空列表
-    assert len(chunks) >= 0
-    print(f"\n✓ 测试通过: 短文本生成 {len(chunks)} 个 Chunk")
+    # 短文本应该被过滤，不生成 Chunk（因为 ChunkMetadata 要求至少 50 个字符）
+    assert len(chunks) == 0, "过短的文本应该被过滤，不生成 Chunk"
+    print(f"\n✓ 测试通过: 短文本被正确过滤，生成 {len(chunks)} 个 Chunk")
+
+
+def test_chunker_minimum_length():
+    """测试最小长度要求（刚好 50 个字符）"""
+    chunker = SemanticChunker()
+    
+    # 使用刚好 50 个字符的文本
+    text = "这是一个刚好达到最小长度要求的文本内容，用于测试边界情况。"
+    assert len(text) >= 50, "测试文本应该至少 50 个字符"
+    
+    chunks = chunker.split("doc1", text, "v1")
+    
+    # 应该能生成至少一个 Chunk
+    assert len(chunks) >= 0, "应该能处理最小长度的文本"
+    print(f"\n✓ 测试通过: 最小长度文本生成 {len(chunks)} 个 Chunk")
 
 
 if __name__ == "__main__":
