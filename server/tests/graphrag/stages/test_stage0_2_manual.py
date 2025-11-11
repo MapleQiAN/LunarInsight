@@ -34,6 +34,7 @@ sys.path.insert(0, str(project_root))
 
 from graphrag.stages import SemanticChunker, CoreferenceResolver, EntityLinker  # type: ignore
 from graphrag.models.chunk import ChunkMetadata  # type: ignore
+from services.config_service import config_service  # type: ignore
 
 
 # 配置日志以显示详细步骤（INFO 即可，算法内部 DEBUG 需要按需开启）
@@ -105,6 +106,26 @@ def run_manual(text: str, doc_id: str, build_version: str, max_chunks: int = 3):
     print(f"Build Version: {build_version}")
     print(f"原始文本长度: {len(text)}")
     print(f"文本预览: { _preview(text, 300) }")
+    
+    # 显示系统 AI 配置
+    _print_section("系统 AI 配置")
+    try:
+        ai_config = config_service.get_ai_provider_config()
+        print(f"Provider: {ai_config.get('provider', '未配置')}")
+        print(f"Model: {ai_config.get('model', '未配置')}")
+        base_url = ai_config.get('base_url')
+        if base_url:
+            print(f"Base URL: {base_url}")
+        api_key = ai_config.get('api_key')
+        if api_key:
+            # 只显示前4位和后4位，中间用***代替
+            masked_key = api_key[:4] + "***" + api_key[-4:] if len(api_key) > 8 else "***"
+            print(f"API Key: {masked_key}")
+        else:
+            print("API Key: 未配置（Mock 或 Ollama 模式不需要）")
+    except Exception as e:
+        print(f"获取 AI 配置失败: {e}")
+        print("将使用默认配置或环境变量")
 
     # 阶段 0: 篇章切分
     chunker = SemanticChunker()
