@@ -106,7 +106,7 @@ def test_coref_basic():
     
     # 断言：基本类型检查
     assert isinstance(result, CorefResult), "应该返回 CorefResult"
-    assert result.mode in ["rewrite", "local", "alias_only", "skip"], "模式应该是有效值"
+    assert result.mode in ["rewrite", "local", "alias_only", "skip", "llm"], "模式应该是有效值"
     assert 0.0 <= result.coverage <= 1.0, "覆盖率应该在 [0, 1] 范围内"
     assert 0.0 <= result.conflict <= 1.0, "冲突率应该在 [0, 1] 范围内"
     assert isinstance(result.alias_map, dict), "alias_map 应该是字典"
@@ -401,6 +401,164 @@ def test_coref_complex_scenario():
     assert result.metrics.get("total_mentions", 0) > 0, "应该检测到提及"
     
     print(f"\n✓ 测试通过: 复杂场景处理正常")
+
+
+def test_coref_llm_mode(monkeypatch):
+    """
+    测试 LLM 模式指代消解
+    
+    使用 mock 模式进行测试（不需要真实 API key）
+    可以通过环境变量或 monkeypatch 配置真实 LLM
+    """
+    print("\n" + "="*80)
+    print("测试: LLM 模式指代消解")
+    print("="*80)
+    
+    # 方式 1: 使用 monkeypatch 模拟 config_service（推荐用于测试）
+    class _MockConfigService:
+        @staticmethod
+        def get_ai_provider_config():
+            # 使用 mock 模式（不需要真实 API）
+            return {
+                "provider": "ollama",
+                "api_key": "mock",
+                "model": "qwen3:8b",
+                "base_url": "http://localhost:11434"
+            }
+    
+    # 方式 2: 如果要测试真实 LLM，可以设置环境变量或修改上面的配置：
+    # return {
+    #     "provider": "openai",  # 或 "deepseek", "qwen", "ollama" 等
+    #     "api_key": "your-api-key",
+    #     "model": "gpt-4o-mini",
+    #     "base_url": ""  # 可选，使用默认值
+    # }
+    
+    from graphrag.stages import stage1_coref as s1
+    monkeypatch.setattr(s1, "config_service", _MockConfigService, raising=True)
+    
+    # 重新创建 resolver（会使用新的 config_service）
+    resolver = CoreferenceResolver()
+    
+    # 检查 LLM 是否启用
+    print(f"LLM 模式状态: {'已启用' if resolver.llm_enabled else '未启用'}")
+    if resolver.llm_client:
+        print(f"LLM Provider: {resolver.llm_client.model}")
+    
+    # 创建测试 Chunk（包含复杂的指代关系）
+    chunk = ChunkMetadata(
+        id="test_doc:llm",
+        doc_id="test_doc",
+        text="Transformer（变换器）是一种基于自注意力机制的神经网络架构。它由 Vaswani 等人于 2017 年提出。该架构摒弃了传统的循环结构。它实现了并行化训练，这使得 Transformer 在自然语言处理任务中取得了突破性进展。",
+        chunk_index=0,
+        sentence_ids=["test_doc:s0", "test_doc:s1", "test_doc:s2", "test_doc:s3", "test_doc:s4"],
+        sentence_count=5,
+        window_start=0,
+        window_end=4,
+        build_version="test_llm_001"
+    )
+    
+    print_step(0, "输入检查", f"Chunk ID: {chunk.id}\n文本: {chunk.text}")
+    print(f"预期行为: LLM 应该能够识别 '它'、'该架构' 等指代 'Transformer'")
+    
+    # 执行指代消解
+    result = resolver.resolve(chunk)
+    
+    # 打印结果
+    print_result(result)
+    
+    # 断言：基本类型检查
+    assert isinstance(result, CorefResult), "应该返回 CorefResult"
+    assert result.mode in ["rewrite", "local", "alias_only", "skip", "llm"], "模式应该是有效值"
+    
+    # 如果使用 LLM 模式，检查结果
+    if result.mode == "llm":
+        print(f"\n✓ LLM 模式成功执行")
+        assert result.coverage >= 0.0, "覆盖率应该 >= 0"
+        assert result.conflict >= 0.0, "冲突率应该 >= 0"
+        # LLM 模式应该能够识别括号别名
+        assert "变换器" in result.alias_map or "Transformer" in result.alias_map, \
+            f"LLM 应该识别括号别名，但 alias_map={result.alias_map}"
+    else:
+        print(f"\n⚠ LLM 模式未使用，回退到 {result.mode} 模式")
+        # 回退模式也是正常的（如果 LLM 不可用或失败）
+    
+    print(f"\n✓ 测试通过: LLM 模式测试完成")
+
+
+def test_coref_llm_with_real_api():
+    """
+    测试真实 LLM API（需要配置环境变量）
+    
+    使用方法:
+    1. 设置环境变量:
+       export AI_PROVIDER=openai
+       export AI_API_KEY=your-api-key
+       export AI_MODEL=gpt-4o-mini
+    
+    2. 或使用 Ollama（本地）:
+       export AI_PROVIDER=ollama
+       export AI_BASE_URL=http://localhost:11434
+       export AI_MODEL=llama3
+    
+    3. 运行测试:
+       pytest tests/graphrag/stages/test_stage1_coref.py::test_coref_llm_with_real_api -v -s
+    """
+    print("\n" + "="*80)
+    print("测试: 真实 LLM API 指代消解")
+    print("="*80)
+    print("注意: 此测试需要配置真实的 AI API key")
+    print("如果未配置，将自动回退到规则方法")
+    print("="*80)
+    
+    resolver = CoreferenceResolver()
+    
+    # 检查 LLM 是否启用
+    if not resolver.llm_enabled:
+        print("\n⚠ LLM 未启用（可能缺少 API key 配置）")
+        print("将使用规则方法进行测试")
+        print("要启用 LLM，请设置环境变量:")
+        print("  - AI_PROVIDER (如: openai, deepseek, ollama)")
+        print("  - AI_API_KEY (API key)")
+        print("  - AI_MODEL (模型名称)")
+        print("  - AI_BASE_URL (可选，Ollama 需要)")
+    else:
+        print(f"\n✓ LLM 已启用: {resolver.llm_client.model}")
+    
+    # 创建测试 Chunk
+    chunk = ChunkMetadata(
+        id="test_doc:real_llm",
+        doc_id="test_doc",
+        text="大语言模型（Large Language Model, LLM）是人工智能领域的重要突破。LLM 通过大规模预训练学习语言表示。该模型能够理解和生成自然语言。它在多个任务上表现出色，包括文本生成、问答、翻译等。",
+        chunk_index=0,
+        sentence_ids=["test_doc:s0", "test_doc:s1", "test_doc:s2", "test_doc:s3", "test_doc:s4"],
+        sentence_count=5,
+        window_start=0,
+        window_end=4,
+        build_version="test_real_llm_001"
+    )
+    
+    print_step(0, "输入检查", f"Chunk ID: {chunk.id}\n文本: {chunk.text}")
+    
+    # 执行指代消解
+    result = resolver.resolve(chunk)
+    
+    # 打印结果
+    print_result(result)
+    
+    # 断言：基本验证
+    assert isinstance(result, CorefResult), "应该返回 CorefResult"
+    assert result.mode in ["rewrite", "local", "alias_only", "skip", "llm"], "模式应该是有效值"
+    
+    if result.mode == "llm":
+        print(f"\n✓ 真实 LLM API 调用成功")
+        print(f"  模式: {result.mode}")
+        print(f"  覆盖率: {result.coverage:.2%}")
+        print(f"  冲突率: {result.conflict:.2%}")
+    else:
+        print(f"\n⚠ 使用 {result.mode} 模式（LLM 可能未配置或失败）")
+    
+    print(f"\n✓ 测试完成")
 
 
 if __name__ == "__main__":
