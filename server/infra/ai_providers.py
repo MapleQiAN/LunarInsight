@@ -248,7 +248,50 @@ class MockClient(BaseAIClient):
         temperature: float = 0.3,
         **extra_params
     ) -> str:
-        # 返回一个简单的mock响应
+        # 检查是否是指代消解请求（通过 prompt 内容判断）
+        user_message = ""
+        for msg in messages:
+            if msg.get("role") == "user":
+                user_message = msg.get("content", "")
+                break
+        
+        # 如果是指代消解请求（包含"指代消解"关键词）
+        if "指代消解" in user_message or "mention" in user_message.lower():
+            # 尝试从 prompt 中提取提及信息
+            import re
+            # 简单的 mock 响应：假设第一个提及匹配第一个候选先行词
+            resolutions = []
+            mention_matches = re.findall(r'"mention_text":\s*"([^"]+)"', user_message)
+            candidate_matches = re.findall(r'"text":\s*"([^"]+)"', user_message)
+            
+            # 如果有提及和候选，创建简单的映射
+            if mention_matches and candidate_matches:
+                for i, mention_text in enumerate(mention_matches[:3]):  # 最多处理前3个
+                    if i < len(candidate_matches):
+                        resolutions.append({
+                            "mention_id": i + 1,
+                            "mention_text": mention_text,
+                            "antecedent_text": candidate_matches[0],  # 简单映射到第一个候选
+                            "confidence": 0.8,
+                            "rationale": "Mock 模式：自动映射"
+                        })
+            
+            # 如果没有提取到，返回一个默认响应
+            if not resolutions:
+                resolutions = [{
+                    "mention_id": 1,
+                    "mention_text": "它",
+                    "antecedent_text": "示例实体",
+                    "confidence": 0.7,
+                    "rationale": "Mock 模式：默认响应"
+                }]
+            
+            return json.dumps({
+                "resolutions": resolutions,
+                "resolved_text": None  # Mock 模式不生成替换文本
+            }, ensure_ascii=False)
+        
+        # 默认返回实体抽取格式（向后兼容）
         return json.dumps({
             "triplets": [
                 {
@@ -259,7 +302,7 @@ class MockClient(BaseAIClient):
                     "language": "zh"
                 }
             ]
-        })
+        }, ensure_ascii=False)
 
 
 class AIProviderFactory:
