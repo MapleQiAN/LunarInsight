@@ -561,6 +561,279 @@ def test_coref_llm_with_real_api():
     print(f"\n✓ 测试完成")
 
 
+def test_coref_custom_text_non_llm():
+    """
+    自定义文字测试区 - 非 LLM 模式（规则方法）
+    
+    使用方法:
+    1. 修改下面的 CUSTOM_TEXT 变量，填入你想要测试的文字
+    2. 运行测试:
+       pytest tests/graphrag/stages/test_stage1_coref.py::test_coref_custom_text_non_llm -v -s
+    """
+    print("\n" + "="*80)
+    print("自定义文字测试区 - 非 LLM 模式（规则方法）")
+    print("="*80)
+    
+    # ============================================================
+    # 自定义测试文字区域 - 在这里修改你想要测试的文字
+    # ============================================================
+    CUSTOM_TEXT = """
+    人工智能（AI）是一种模拟人类智能的技术。它能够处理复杂的任务。
+    AI 在多个领域都有应用，包括医疗、金融、教育等行业。
+    该技术正在快速发展，其应用前景非常广阔。
+    """
+    # ============================================================
+    
+    # 清理文本（去除首尾空白，合并多行）
+    custom_text = CUSTOM_TEXT.strip().replace('\n', ' ').replace('  ', ' ')
+    
+    if not custom_text:
+        print("\n⚠ 警告: 自定义文本为空，请修改 CUSTOM_TEXT 变量")
+        return
+    
+    # 创建 resolver（非 LLM 模式，使用规则方法）
+    resolver = CoreferenceResolver()
+    
+    # 确保不使用 LLM（即使配置了 LLM，也强制使用规则方法）
+    if resolver.llm_enabled:
+        print(f"\n⚠ 注意: 检测到 LLM 已配置，但本测试使用非 LLM 模式（规则方法）")
+        print(f"  如需测试 LLM 模式，请使用 test_coref_custom_text_llm()")
+    
+    # 创建测试 Chunk
+    # 根据文本长度自动生成句子 ID
+    sentences = custom_text.split('。')
+    sentences = [s.strip() for s in sentences if s.strip()]
+    sentence_count = len(sentences)
+    sentence_ids = [f"custom_doc:s{i}" for i in range(sentence_count)]
+    
+    chunk = ChunkMetadata(
+        id="custom_doc:0",
+        doc_id="custom_doc",
+        text=custom_text,
+        chunk_index=0,
+        sentence_ids=sentence_ids,
+        sentence_count=sentence_count,
+        window_start=0,
+        window_end=sentence_count - 1 if sentence_count > 0 else 0,
+        build_version="custom_test_001"
+    )
+    
+    print_step(0, "输入检查", 
+               f"Chunk ID: {chunk.id}\n"
+               f"文本: {chunk.text}\n"
+               f"文本长度: {len(chunk.text)} 字符\n"
+               f"句子数: {sentence_count}")
+    
+    # 执行指代消解（使用规则方法）
+    result = resolver.resolve(chunk)
+    
+    # 打印结果
+    print_result(result)
+    
+    # 额外信息：显示文本替换对比
+    if result.resolved_text and result.resolved_text != chunk.text:
+        print(f"\n{'='*60}")
+        print("文本替换对比")
+        print(f"{'='*60}")
+        print("原文:")
+        print(f"  {chunk.text}")
+        print("\n替换后:")
+        print(f"  {result.resolved_text}")
+    
+    # 断言：基本验证
+    assert isinstance(result, CorefResult), "应该返回 CorefResult"
+    assert result.mode in ["rewrite", "local", "alias_only", "skip"], "非 LLM 模式不应该返回 llm 模式"
+    
+    print(f"\n{'='*60}")
+    print("测试完成")
+    print(f"{'='*60}")
+    print(f"模式: {result.mode}")
+    print(f"覆盖率: {result.coverage:.2%}")
+    print(f"冲突率: {result.conflict:.2%}")
+    print(f"别名映射数: {len(result.alias_map)}")
+    print(f"匹配数: {len(result.matches)}")
+    print(f"{'='*60}")
+
+
+def test_coref_custom_text_llm(monkeypatch):
+    """
+    自定义文字测试区 - LLM 模式
+    
+    使用方法:
+    1. 修改下面的 CUSTOM_TEXT 变量，填入你想要测试的文字
+    2. 配置 LLM 参数（在下面的 LLM_CONFIG 区域）:
+       - provider: AI 提供商（如: openai, deepseek, ollama, qwen 等）
+       - api_key: API 密钥（Ollama 可以设为 None 或 "mock"）
+       - model: 模型名称
+       - base_url: API 基础 URL（可选，Ollama 需要）
+    3. 运行测试:
+       pytest tests/graphrag/stages/test_stage1_coref.py::test_coref_custom_text_llm -v -s
+    
+    注意:
+    - 如果使用 Ollama，确保本地已启动 Ollama 服务
+    - 如果使用其他提供商，需要有效的 API key
+    - 如果配置错误或 LLM 不可用，会自动回退到规则方法
+    """
+    print("\n" + "="*80)
+    print("自定义文字测试区 - LLM 模式")
+    print("="*80)
+    
+    # ============================================================
+    # 自定义测试文字区域 - 在这里修改你想要测试的文字
+    # ============================================================
+    CUSTOM_TEXT = """
+    人工智能（AI）是一种模拟人类智能的技术。它能够处理复杂的任务。
+    AI 在多个领域都有应用，包括医疗、金融、教育等行业。
+    该技术正在快速发展，其应用前景非常广阔。
+    """
+    # ============================================================
+    
+    # ============================================================
+    # LLM 配置区域 - 在这里配置你的 LLM 参数
+    # ============================================================
+    LLM_CONFIG = {
+        "provider": "ollama",           # AI 提供商: openai, deepseek, ollama, qwen, etc.
+        "api_key": None,                # API 密钥（Ollama 可以设为 None）
+        "model": "qwen3:4b",          # 模型名称
+        "base_url": "http://localhost:11434"  # API 基础 URL（Ollama 需要）
+    }
+    
+    # 示例配置（取消注释以使用）:
+    # 
+    # OpenAI:
+    # LLM_CONFIG = {
+    #     "provider": "openai",
+    #     "api_key": "sk-your-api-key-here",
+    #     "model": "gpt-4o-mini",
+    #     "base_url": None  # 使用默认值
+    # }
+    # 
+    # DeepSeek:
+    # LLM_CONFIG = {
+    #     "provider": "deepseek",
+    #     "api_key": "sk-your-api-key-here",
+    #     "model": "deepseek-chat",
+    #     "base_url": None
+    # }
+    # 
+    # Ollama (本地):
+    # LLM_CONFIG = {
+    #     "provider": "ollama",
+    #     "api_key": None,
+    #     "model": "llama3",
+    #     "base_url": "http://localhost:11434"
+    # }
+    # ============================================================
+    
+    # 清理文本（去除首尾空白，合并多行）
+    custom_text = CUSTOM_TEXT.strip().replace('\n', ' ').replace('  ', ' ')
+    
+    if not custom_text:
+        print("\n⚠ 警告: 自定义文本为空，请修改 CUSTOM_TEXT 变量")
+        return
+    
+    # 配置 LLM（使用 monkeypatch 覆盖 config_service）
+    class _MockConfigService:
+        @staticmethod
+        def get_ai_provider_config():
+            return {
+                "provider": LLM_CONFIG["provider"],
+                "api_key": LLM_CONFIG["api_key"],
+                "model": LLM_CONFIG["model"],
+                "base_url": LLM_CONFIG["base_url"]
+            }
+    
+    from graphrag.stages import stage1_coref as s1
+    monkeypatch.setattr(s1, "config_service", _MockConfigService, raising=True)
+    
+    # 创建 resolver（会使用上面配置的 LLM）
+    resolver = CoreferenceResolver()
+    
+    # 检查 LLM 是否启用
+    print(f"\nLLM 配置:")
+    print(f"  Provider: {LLM_CONFIG['provider']}")
+    print(f"  Model: {LLM_CONFIG['model']}")
+    print(f"  Base URL: {LLM_CONFIG['base_url']}")
+    print(f"LLM 状态: {'✓ 已启用' if resolver.llm_enabled else '✗ 未启用'}")
+    
+    if not resolver.llm_enabled:
+        print("\n⚠ 警告: LLM 未启用，将回退到非 LLM 模式（规则方法）")
+        print("可能的原因:")
+        print("  1. API key 未配置或无效")
+        print("  2. Base URL 不正确（Ollama 需要）")
+        print("  3. 模型名称不存在")
+        print("  4. 网络连接问题")
+    elif resolver.llm_client:
+        print(f"  LLM Client: {resolver.llm_client.model}")
+    
+    # 创建测试 Chunk
+    # 根据文本长度自动生成句子 ID
+    sentences = custom_text.split('。')
+    sentences = [s.strip() for s in sentences if s.strip()]
+    sentence_count = len(sentences)
+    sentence_ids = [f"custom_doc:s{i}" for i in range(sentence_count)]
+    
+    chunk = ChunkMetadata(
+        id="custom_doc:0",
+        doc_id="custom_doc",
+        text=custom_text,
+        chunk_index=0,
+        sentence_ids=sentence_ids,
+        sentence_count=sentence_count,
+        window_start=0,
+        window_end=sentence_count - 1 if sentence_count > 0 else 0,
+        build_version="custom_test_001"
+    )
+    
+    print_step(0, "输入检查", 
+               f"Chunk ID: {chunk.id}\n"
+               f"文本: {chunk.text}\n"
+               f"文本长度: {len(chunk.text)} 字符\n"
+               f"句子数: {sentence_count}")
+    
+    # 执行指代消解
+    result = resolver.resolve(chunk)
+    
+    # 打印结果
+    print_result(result)
+    
+    # 额外信息：显示文本替换对比
+    if result.resolved_text and result.resolved_text != chunk.text:
+        print(f"\n{'='*60}")
+        print("文本替换对比")
+        print(f"{'='*60}")
+        print("原文:")
+        print(f"  {chunk.text}")
+        print("\n替换后:")
+        print(f"  {result.resolved_text}")
+    
+    # 断言：基本验证
+    assert isinstance(result, CorefResult), "应该返回 CorefResult"
+    assert result.mode in ["rewrite", "local", "alias_only", "skip", "llm"], "模式应该是有效值"
+    
+    # 检查是否使用了 LLM 模式
+    if result.mode == "llm":
+        print(f"\n✓ LLM 模式成功执行")
+        assert result.coverage >= 0.0, "覆盖率应该 >= 0"
+        assert result.conflict >= 0.0, "冲突率应该 >= 0"
+    else:
+        print(f"\n⚠ 注意: 虽然配置了 LLM，但实际使用了 {result.mode} 模式")
+        print("  这可能是因为:")
+        print("    1. LLM 调用失败")
+        print("    2. 质量门控判断不需要 LLM")
+        print("    3. 自动回退到规则方法")
+    
+    print(f"\n{'='*60}")
+    print("测试完成")
+    print(f"{'='*60}")
+    print(f"模式: {result.mode}")
+    print(f"覆盖率: {result.coverage:.2%}")
+    print(f"冲突率: {result.conflict:.2%}")
+    print(f"别名映射数: {len(result.alias_map)}")
+    print(f"匹配数: {len(result.matches)}")
+    print(f"{'='*60}")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
 
