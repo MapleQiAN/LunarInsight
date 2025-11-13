@@ -980,19 +980,74 @@ class CoreferenceResolver:
         resolved_text = None
         matches = []
         
-        resolutions = llm_result.get("resolutions", [])
-        resolved_text = llm_result.get("resolved_text")
+        resolved_mentions = set()
         
         # 构建提及字典
         mention_dict = {i+1: m for i, m in enumerate(mentions)}
         
-        resolved_mentions = set()
+        # 处理两种可能的LLM返回格式
+        resolutions = []
+        
+        # 格式1: 标准格式 - "resolutions" 数组
+        if "resolutions" in llm_result:
+            resolutions = llm_result.get("resolutions", [])
+        
+        # 格式2: 简化格式 - "mentions" 数组
+        elif "mentions" in llm_result:
+            llm_mentions = llm_result.get("mentions", [])
+            global_confidence = llm_result.get("confidence", 0.8)
+            global_rationale = llm_result.get("rationale", "")
+            
+            # 转换为标准格式
+            for i, llm_mention in enumerate(llm_mentions):
+                resolutions.append({
+                    "mention_id": i + 1,
+                    "mention_text": llm_mention.get("text", ""),
+                    "antecedent_text": llm_mention.get("resolution", ""),
+                    "confidence": global_confidence,
+                    "rationale": global_rationale
+                })
+        
+        # 如果还是没有找到有效数据，尝试其他可能的字段
+        else:
+            logger.warning(f"[Stage1-LLM] LLM返回格式不符合预期，原始数据: {llm_result}")
+            # 创建一个空的结果
+            total_mentions = len(mentions)
+            return CorefResult(
+                resolved_text=None,
+                alias_map={},
+                mode="llm",
+                coverage=0.0,
+                conflict=0.0,
+                metrics={
+                    "pronoun_coverage": 0.0,
+                    "abbrev_coverage": 0.0,
+                    "total_mentions": total_mentions,
+                    "resolved_mentions": 0,
+                    "total_matches": 0,
+                    "conflict_matches": 0,
+                    "llm_mode": "direct"
+                },
+                provenance=[],
+                matches=[]
+            )
+        
+        # 处理解析结果
         for res in resolutions:
             mention_id = res.get("mention_id")
             mention_text = res.get("mention_text")
             antecedent_text = res.get("antecedent_text")
             confidence = res.get("confidence", 0.5)
             rationale = res.get("rationale", "")
+            
+            if not mention_id or mention_id not in mention_dict:
+                logger.debug(f"[Stage1-LLM] 跳过无效的mention_id: {mention_id}")
+                continue
+            
+            mention = mention_dict[mention_id]
+            
+            # 调试：打印每个解析结果
+            logger.debug(f"[Stage1-LLM] 处理: {mention_text} -> {antecedent_text}")
             
             # 如果LLM返回null，跳过
             if not antecedent_text or antecedent_text.lower() == 'null':
@@ -1013,7 +1068,7 @@ class CoreferenceResolver:
             matches_in_text = list(pattern.finditer(text))
             
             # 找到在提及之前的所有匹配
-            valid_positions = [m.start() for m in matches_in_text if m.start() < mention_dict[mention_id].position]
+            valid_positions = [m.start() for m in matches_in_text if m.start() < mention.position]
             
             if valid_positions:
                 # 使用最接近提及的匹配位置
@@ -1032,9 +1087,9 @@ class CoreferenceResolver:
                 resolved_mentions.add(mention_text)
                 
                 # 创建 Match 对象
-                sentence_distance = abs(mention_dict[mention_id].sentence_idx - virtual_antecedent.sentence_idx)
+                sentence_distance = abs(mention.sentence_idx - virtual_antecedent.sentence_idx)
                 match = Match(
-                    mention=mention_dict[mention_id],
+                    mention=mention,
                     antecedent=virtual_antecedent,
                     score=confidence,
                     confidence=confidence,
@@ -1051,7 +1106,7 @@ class CoreferenceResolver:
                     "evidence_type": "llm_direct",
                     "rationale": f"LLM直接识别: {rationale}",
                     "sentence_distance": sentence_distance,
-                    "mention_position": mention_dict[mention_id].position,
+                    "mention_position": mention.position,
                     "antecedent_position": closest_pos
                 })
                 
