@@ -19,7 +19,6 @@ class GraphService:
     
     def __init__(self):
         logger.info("GraphService initialized")
-        # TODO: 初始化 Neo4j 客户端
     
     def store_chunk(self, chunk: Dict[str, Any]):
         """
@@ -29,11 +28,24 @@ class GraphService:
             chunk: Chunk 数据
         """
         logger.debug(f"存储 Chunk: {chunk['id']}")
-        
-        # TODO: Cypher MERGE
-        # MERGE (c:Chunk {id: $id})
-        # SET c += $properties
-        # SET c.updated_at = datetime()
+        from infra.neo4j_client import neo4j_client
+        query = """
+        MERGE (c:Chunk {id: $id})
+        SET c.doc_id = $doc_id,
+            c.section_path = $section_path,
+            c.text = $text,
+            c.embedding = $embedding,
+            c.created_at = coalesce(c.created_at, datetime()),
+            c.updated_at = datetime()
+        RETURN c
+        """
+        neo4j_client.execute_query(query, {
+            "id": chunk.get("id"),
+            "doc_id": chunk.get("doc_id"),
+            "section_path": chunk.get("section_path"),
+            "text": chunk.get("text"),
+            "embedding": chunk.get("embedding"),
+        })
     
     def store_concept(self, concept: Dict[str, Any]):
         """
@@ -43,8 +55,20 @@ class GraphService:
             concept: Concept 数据
         """
         logger.debug(f"存储 Concept: {concept['id']}")
-        
-        # TODO: Cypher MERGE
+        from infra.neo4j_client import neo4j_client
+        query = """
+        MERGE (c:Concept {name: $name})
+        SET c.domain = $domain,
+            c.meta = $meta,
+            c.created_at = coalesce(c.created_at, datetime()),
+            c.updated_at = datetime()
+        RETURN c
+        """
+        neo4j_client.execute_query(query, {
+            "name": concept.get("id") or concept.get("name"),
+            "domain": concept.get("domain"),
+            "meta": concept.get("meta"),
+        })
     
     def store_claim(self, claim: Dict[str, Any]):
         """
@@ -54,8 +78,28 @@ class GraphService:
             claim: Claim 数据
         """
         logger.debug(f"存储 Claim: {claim['id']}")
-        
-        # TODO: Cypher MERGE
+        from infra.neo4j_client import neo4j_client
+        query = """
+        MERGE (cl:Claim {id: $id})
+        SET cl.text = $text,
+            cl.doc_id = $doc_id,
+            cl.chunk_id = $chunk_id,
+            cl.claim_type = $claim_type,
+            cl.embedding = $embedding,
+            cl.confidence = $confidence,
+            cl.created_at = coalesce(cl.created_at, datetime()),
+            cl.updated_at = datetime()
+        RETURN cl
+        """
+        neo4j_client.execute_query(query, {
+            "id": claim.get("id"),
+            "text": claim.get("text"),
+            "doc_id": claim.get("doc_id"),
+            "chunk_id": claim.get("chunk_id"),
+            "claim_type": claim.get("claim_type"),
+            "embedding": claim.get("embedding"),
+            "confidence": claim.get("confidence"),
+        })
     
     def store_relation(self, relation: Dict[str, Any]):
         """
@@ -65,11 +109,22 @@ class GraphService:
             relation: 关系数据 {source_id, target_id, type, properties}
         """
         logger.debug(f"存储关系: {relation['source_id']} -{relation['type']}-> {relation['target_id']}")
-        
-        # TODO: Cypher MERGE
-        # MATCH (s {id: $source_id}), (t {id: $target_id})
-        # MERGE (s)-[r:TYPE {id: $rel_id}]->(t)
-        # SET r += $properties
+        from infra.neo4j_client import neo4j_client
+        query = f"""
+        MATCH (s), (t)
+        WHERE (exists(s.id) AND s.id = $sid) OR (exists(s.name) AND s.name = $sid)
+          AND (exists(t.id) AND t.id = $tid) OR (exists(t.name) AND t.name = $tid)
+        MERGE (s)-[r:{relation.get('type')}]->(t)
+        SET r += $props,
+            r.created_at = coalesce(r.created_at, datetime()),
+            r.updated_at = datetime()
+        RETURN r
+        """
+        neo4j_client.execute_query(query, {
+            "sid": relation.get("source_id"),
+            "tid": relation.get("target_id"),
+            "props": relation.get("properties", {}),
+        })
     
     def store_with_provenance(
         self,
@@ -90,14 +145,35 @@ class GraphService:
             sentence_ids: 句子 ID 列表
         """
         logger.debug(f"存储节点（带证据）: {node['id']}")
-        
-        # TODO: 存储节点 + 创建 EVIDENCE_FROM 关系
-        # MERGE (n:NodeType {id: $id})
-        # SET n += $properties
-        # WITH n
-        # MATCH (chunk:Chunk {id: $chunk_id})
-        # MERGE (n)-[e:EVIDENCE_FROM]->(chunk)
-        # SET e.doc_id = $doc_id, e.section_path = $section_path, e.sentence_ids = $sentence_ids
+        from infra.neo4j_client import neo4j_client
+        labels = node.get("labels") or node.get("label") or "Concept"
+        create_query = f"""
+        MERGE (n:{labels} {{id: $id}})
+        SET n += $props,
+            n.created_at = coalesce(n.created_at, datetime()),
+            n.updated_at = datetime()
+        RETURN n
+        """
+        neo4j_client.execute_query(create_query, {"id": node.get("id"), "props": node})
+
+        ev_query = """
+        MATCH (n {id: $nid})
+        MATCH (chunk:Chunk {id: $chunk_id})
+        MERGE (n)-[e:EVIDENCE_FROM]->(chunk)
+        SET e.doc_id = $doc_id,
+            e.section_path = $section_path,
+            e.sentence_ids = $sentence_ids,
+            e.created_at = coalesce(e.created_at, datetime()),
+            e.updated_at = datetime()
+        RETURN e
+        """
+        neo4j_client.execute_query(ev_query, {
+            "nid": node.get("id"),
+            "chunk_id": evidence_chunk_id,
+            "doc_id": doc_id,
+            "section_path": section_path,
+            "sentence_ids": sentence_ids or [],
+        })
 
 
 __all__ = ["GraphService"]
