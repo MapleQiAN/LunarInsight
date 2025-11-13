@@ -926,21 +926,7 @@ class CoreferenceResolver:
                 "position": m.position
             })
         
-        # 格式化候选先行词列表（去重，按位置排序）
-        unique_antecedents = {}
-        for ant in antecedents:
-            if ant.text not in unique_antecedents:
-                unique_antecedents[ant.text] = ant
-        
-        candidates_list = []
-        for ant in sorted(unique_antecedents.values(), key=lambda x: x.position):
-            candidates_list.append({
-                "text": ant.text,
-                "position": ant.position,
-                "entity_type": ant.entity_type or "unknown"
-            })
-        
-        # 构造 prompt
+        # 构造 prompt - 让LLM自行理解整段文字
         prompt = f"""请对以下中文文本进行指代消解。
 
 文本内容：
@@ -949,18 +935,15 @@ class CoreferenceResolver:
 检测到的提及（需要消解的指代词）：
 {json.dumps(mentions_list, ensure_ascii=False, indent=2)}
 
-候选先行词（可能的实体）：
-{json.dumps(candidates_list, ensure_ascii=False, indent=2)}
-
 括号别名映射（强约束，必须遵守）：
 {json.dumps(parenthesis_aliases, ensure_ascii=False, indent=2)}
 
 请为每个提及选择最合理的先行词。要求：
-1. 先行词必须在候选列表中
-2. 先行词必须在提及之前出现
-3. 必须遵守括号别名映射（如果提及是括号别名，必须映射到对应的全称）
-4. 如果无法确定，可以返回 null
-5. 考虑语义一致性、句法一致性、距离等因素
+1. 先行词必须在原文中存在，且在提及之前出现
+2. 必须遵守括号别名映射（如果提及是括号别名，必须映射到对应的全称）
+3. 如果无法确定，可以返回 null
+4. 考虑语义一致性、句法一致性、距离等因素
+5. 请仔细阅读整段文字，理解上下文关系后进行判断
 
 请以 JSON 格式返回结果，格式如下：
 {{
@@ -1021,29 +1004,31 @@ class CoreferenceResolver:
                     logger.warning(f"[Stage1-LLM] 括号别名约束冲突: '{mention.text}' 应映射到 '{canonical}'，但 LLM 返回 '{antecedent_text}'，使用括号别名")
                     antecedent_text = canonical
             
-            # 验证先行词是否在候选列表中
-            if antecedent_text and antecedent_text in antecedent_dict:
-                antecedent = antecedent_dict[antecedent_text]
-                
-                # 验证先行词在提及之前
-                if antecedent.position < mention.position:
-                    alias_map[mention.text] = antecedent_text
-                    resolved_mentions.add(mention.text)
+            # 验证先行词是否在原文中存在
+            if antecedent_text:
+                # 检查是否在候选先行词中
+                if antecedent_text in antecedent_dict:
+                    antecedent = antecedent_dict[antecedent_text]
                     
-                    # 创建 Match 对象
-                    sentence_distance = abs(mention.sentence_idx - antecedent.sentence_idx)
-                    match = Match(
-                        mention=mention,
-                        antecedent=antecedent,
-                        score=confidence,
-                        confidence=confidence,
-                        evidence_type="llm",
-                        sentence_distance=sentence_distance,
-                        is_conflict=False
-                    )
-                    matches.append(match)
-                    
-                    provenance.append({
+                    # 验证先行词在提及之前
+                    if antecedent.position < mention.position:
+                        alias_map[mention.text] = antecedent_text
+                        resolved_mentions.add(mention.text)
+                        
+                        # 创建 Match 对象
+                        sentence_distance = abs(mention.sentence_idx - antecedent.sentence_idx)
+                        match = Match(
+                            mention=mention,
+                            antecedent=antecedent,
+                            score=confidence,
+                            confidence=confidence,
+                            evidence_type="llm",
+                            sentence_distance=sentence_distance,
+                            is_conflict=False
+                        )
+                        matches.append(match)
+                        
+                        provenance.append({
                         "mention": mention.text,
                         "canonical": antecedent_text,
                         "confidence": confidence,
@@ -1056,7 +1041,58 @@ class CoreferenceResolver:
                 else:
                     logger.warning(f"[Stage1-LLM] 先行词 '{antecedent_text}' 在提及 '{mention.text}' 之后，跳过")
             elif antecedent_text:
-                logger.warning(f"[Stage1-LLM] 先行词 '{antecedent_text}' 不在候选列表中，跳过")
+                # 检查LLM返回的先行词是否在原文中存在
+                # 在原文中搜索该先行词
+                import re
+                pattern = re.compile(re.escape(antecedent_text))
+                matches_in_text = list(pattern.finditer(text))
+                
+                # 找到在提及之前的所有匹配
+                valid_positions = [m.start() for m in matches_in_text if m.start() < mention.position]
+                
+                if valid_positions:
+                    # 使用最接近提及的匹配位置
+                    closest_pos = max(valid_positions)
+                    
+                    # 创建一个虚拟的Antecedent对象
+                    from ..models.graph import Antecedent
+                    virtual_antecedent = Antecedent(
+                        text=antecedent_text,
+                        position=closest_pos,
+                        entity_type="unknown",  # LLM自行判断的类型
+                        sentence_idx=self._get_sentence_index_from_position(text, closest_pos)
+                    )
+                    
+                    alias_map[mention.text] = antecedent_text
+                    resolved_mentions.add(mention.text)
+                    
+                    # 创建 Match 对象
+                    sentence_distance = abs(mention.sentence_idx - virtual_antecedent.sentence_idx)
+                    match = Match(
+                        mention=mention,
+                        antecedent=virtual_antecedent,
+                        score=confidence,
+                        confidence=confidence,
+                        evidence_type="llm_freeform",  # 标记为自由形式
+                        sentence_distance=sentence_distance,
+                        is_conflict=False
+                    )
+                    matches.append(match)
+                    
+                    provenance.append({
+                        "mention": mention.text,
+                        "canonical": antecedent_text,
+                        "confidence": confidence,
+                        "evidence_type": "llm_freeform",
+                        "rationale": f"LLM自由识别的先行词: {rationale}",
+                        "sentence_distance": sentence_distance,
+                        "mention_position": mention.position,
+                        "antecedent_position": closest_pos
+                    })
+                    
+                    logger.info(f"[Stage1-LLM] LLM自由识别先行词: '{mention.text}' -> '{antecedent_text}'")
+                else:
+                    logger.warning(f"[Stage1-LLM] LLM返回的先行词 '{antecedent_text}' 在原文中不存在或在提及之后，跳过")
         
         # 添加括号别名
         alias_map.update(parenthesis_aliases)
@@ -1274,6 +1310,23 @@ class CoreferenceResolver:
         pattern = r'[。！？\.\!\?]+'
         sentences = re.split(pattern, text)
         return [s.strip() for s in sentences if s.strip()]
+    
+    def _get_sentence_index_from_position(self, text: str, position: int) -> int:
+        """根据文本位置获取句子索引"""
+        sentences = self._split_sentences(text)
+        
+        current_pos = 0
+        for i, sentence in enumerate(sentences):
+            sentence_start = text.find(sentence, current_pos)
+            sentence_end = sentence_start + len(sentence)
+            
+            if sentence_start <= position < sentence_end:
+                return i
+            
+            current_pos = sentence_end
+        
+        # 如果超出范围，返回最后一个句子索引
+        return len(sentences) - 1 if sentences else 0
 
 
 __all__ = ["CoreferenceResolver", "CorefResult"]
