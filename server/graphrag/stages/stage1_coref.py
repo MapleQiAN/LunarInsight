@@ -331,6 +331,12 @@ class CoreferenceResolver:
         # 指示词
         demonstratives = ['该', '此', '其', '前者', '后者', '上述', '下述']
         
+        # 需要避免误检测的复合词（包含"其"但不应拆解）
+        exclude_patterns = [
+            '其他', '其它', '除此之外', '其中', '其实', '其它', '其余', '其中',
+            '极其', '其中', '其实', '其它', '其它', '其它', '其它'
+        ]
+        
         for sent_idx, sentence in enumerate(sentences):
             sent_start = text.find(sentence)
             if sent_start == -1:
@@ -342,6 +348,25 @@ class CoreferenceResolver:
                 pattern = re.escape(pronoun)
                 for match in re.finditer(pattern, sentence):
                     pos = sent_start + match.start()
+                    
+                    # 特殊处理：如果是"其"，检查是否在复合词中
+                    if pronoun == '其':
+                        # 获取匹配位置前后各2个字符的上下文
+                        context_start = max(0, pos - 2)
+                        context_end = min(len(text), pos + len(pronoun) + 2)
+                        context = text[context_start:context_end]
+                        
+                        # 如果上下文包含排除模式，跳过
+                        should_exclude = False
+                        for exclude in exclude_patterns:
+                            if exclude in context:
+                                should_exclude = True
+                                break
+                        
+                        if should_exclude:
+                            logger.debug(f"[Stage1] 跳过复合词中的'其': context='{context}'")
+                            continue
+                    
                     mentions.append(Mention(
                         text=pronoun,
                         type=MentionType.PRONOUN,
@@ -367,6 +392,23 @@ class CoreferenceResolver:
             for demo in demonstratives:
                 if demo in sentence:
                     pos = sent_start + sentence.find(demo)
+                    
+                    # 特殊处理：如果是"其"，同样检查复合词
+                    if demo == '其':
+                        context_start = max(0, pos - 2)
+                        context_end = min(len(text), pos + len(demo) + 2)
+                        context = text[context_start:context_end]
+                        
+                        should_exclude = False
+                        for exclude in exclude_patterns:
+                            if exclude in context:
+                                should_exclude = True
+                                break
+                        
+                        if should_exclude:
+                            logger.debug(f"[Stage1] 跳过复合词中的指示词'其': context='{context}'")
+                            continue
+                    
                     mentions.append(Mention(
                         text=demo,
                         type=MentionType.DEMONSTRATIVE,
