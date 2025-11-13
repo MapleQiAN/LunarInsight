@@ -839,6 +839,9 @@ class CoreferenceResolver:
         # 3. 生成候选先行词
         antecedents = self._generate_antecedents(text, mentions)
         
+        # 调试：打印候选先行词
+        logger.debug(f"[Stage1-LLM] 生成的候选先行词: {[ant.text for ant in antecedents]}")
+        
         # 4. 构造 LLM prompt
         prompt = self._build_llm_prompt(text, mentions, antecedents, parenthesis_aliases)
         
@@ -971,7 +974,7 @@ class CoreferenceResolver:
         parenthesis_aliases: Dict[str, str],
         llm_result: Dict[str, Any]
     ) -> CorefResult:
-        """解析 LLM 返回结果并转换为 CorefResult"""
+        """解析 LLM 返回结果并转换为 CorefResult - 直接信任LLM版本"""
         alias_map = {}
         provenance = []
         resolved_text = None
@@ -980,9 +983,8 @@ class CoreferenceResolver:
         resolutions = llm_result.get("resolutions", [])
         resolved_text = llm_result.get("resolved_text")
         
-        # 构建别名映射和匹配结果
+        # 构建提及字典
         mention_dict = {i+1: m for i, m in enumerate(mentions)}
-        antecedent_dict = {ant.text: ant for ant in antecedents}
         
         resolved_mentions = set()
         for res in resolutions:
@@ -992,107 +994,70 @@ class CoreferenceResolver:
             confidence = res.get("confidence", 0.5)
             rationale = res.get("rationale", "")
             
-            if not mention_id or mention_id not in mention_dict:
+            # 如果LLM返回null，跳过
+            if not antecedent_text or antecedent_text.lower() == 'null':
+                logger.debug(f"[Stage1-LLM] LLM返回null，跳过: {mention_text}")
                 continue
             
-            mention = mention_dict[mention_id]
-            
-            # 检查括号别名约束
-            if mention.text in parenthesis_aliases:
-                canonical = parenthesis_aliases[mention.text]
+            # 检查括号别名约束（强约束）
+            if mention_text in parenthesis_aliases:
+                canonical = parenthesis_aliases[mention_text]
                 if antecedent_text != canonical:
-                    logger.warning(f"[Stage1-LLM] 括号别名约束冲突: '{mention.text}' 应映射到 '{canonical}'，但 LLM 返回 '{antecedent_text}'，使用括号别名")
+                    logger.warning(f"[Stage1-LLM] 括号别名约束冲突: '{mention_text}' 应映射到 '{canonical}'，但 LLM 返回 '{antecedent_text}'，使用括号别名")
                     antecedent_text = canonical
             
-            # 验证先行词是否在原文中存在
-            if antecedent_text:
-                # 检查是否在候选先行词中
-                if antecedent_text in antecedent_dict:
-                    antecedent = antecedent_dict[antecedent_text]
-                    
-                    # 验证先行词在提及之前
-                    if antecedent.position < mention.position:
-                        alias_map[mention.text] = antecedent_text
-                        resolved_mentions.add(mention.text)
-                        
-                        # 创建 Match 对象
-                        sentence_distance = abs(mention.sentence_idx - antecedent.sentence_idx)
-                        match = Match(
-                            mention=mention,
-                            antecedent=antecedent,
-                            score=confidence,
-                            confidence=confidence,
-                            evidence_type="llm",
-                            sentence_distance=sentence_distance,
-                            is_conflict=False
-                        )
-                        matches.append(match)
-                        
-                        provenance.append({
-                        "mention": mention.text,
-                        "canonical": antecedent_text,
-                        "confidence": confidence,
-                        "evidence_type": "llm",
-                        "rationale": rationale,
-                        "sentence_distance": sentence_distance,
-                        "mention_position": mention.position,
-                        "antecedent_position": antecedent.position
-                    })
-                else:
-                    logger.warning(f"[Stage1-LLM] 先行词 '{antecedent_text}' 在提及 '{mention.text}' 之后，跳过")
-            elif antecedent_text:
-                # 检查LLM返回的先行词是否在原文中存在
-                # 在原文中搜索该先行词
-                import re
-                pattern = re.compile(re.escape(antecedent_text))
-                matches_in_text = list(pattern.finditer(text))
+            # 验证先行词是否在原文中存在且位置合理
+            # 在原文中搜索该先行词
+            import re
+            pattern = re.compile(re.escape(antecedent_text))
+            matches_in_text = list(pattern.finditer(text))
+            
+            # 找到在提及之前的所有匹配
+            valid_positions = [m.start() for m in matches_in_text if m.start() < mention_dict[mention_id].position]
+            
+            if valid_positions:
+                # 使用最接近提及的匹配位置
+                closest_pos = max(valid_positions)
                 
-                # 找到在提及之前的所有匹配
-                valid_positions = [m.start() for m in matches_in_text if m.start() < mention.position]
+                # 创建一个虚拟的Antecedent对象
+                from ..models.graph import Antecedent
+                virtual_antecedent = Antecedent(
+                    text=antecedent_text,
+                    position=closest_pos,
+                    entity_type="llm_identified",  # 标记为LLM识别
+                    sentence_idx=self._get_sentence_index_from_position(text, closest_pos)
+                )
                 
-                if valid_positions:
-                    # 使用最接近提及的匹配位置
-                    closest_pos = max(valid_positions)
-                    
-                    # 创建一个虚拟的Antecedent对象
-                    from ..models.graph import Antecedent
-                    virtual_antecedent = Antecedent(
-                        text=antecedent_text,
-                        position=closest_pos,
-                        entity_type="unknown",  # LLM自行判断的类型
-                        sentence_idx=self._get_sentence_index_from_position(text, closest_pos)
-                    )
-                    
-                    alias_map[mention.text] = antecedent_text
-                    resolved_mentions.add(mention.text)
-                    
-                    # 创建 Match 对象
-                    sentence_distance = abs(mention.sentence_idx - virtual_antecedent.sentence_idx)
-                    match = Match(
-                        mention=mention,
-                        antecedent=virtual_antecedent,
-                        score=confidence,
-                        confidence=confidence,
-                        evidence_type="llm_freeform",  # 标记为自由形式
-                        sentence_distance=sentence_distance,
-                        is_conflict=False
-                    )
-                    matches.append(match)
-                    
-                    provenance.append({
-                        "mention": mention.text,
-                        "canonical": antecedent_text,
-                        "confidence": confidence,
-                        "evidence_type": "llm_freeform",
-                        "rationale": f"LLM自由识别的先行词: {rationale}",
-                        "sentence_distance": sentence_distance,
-                        "mention_position": mention.position,
-                        "antecedent_position": closest_pos
-                    })
-                    
-                    logger.info(f"[Stage1-LLM] LLM自由识别先行词: '{mention.text}' -> '{antecedent_text}'")
-                else:
-                    logger.warning(f"[Stage1-LLM] LLM返回的先行词 '{antecedent_text}' 在原文中不存在或在提及之后，跳过")
+                alias_map[mention_text] = antecedent_text
+                resolved_mentions.add(mention_text)
+                
+                # 创建 Match 对象
+                sentence_distance = abs(mention_dict[mention_id].sentence_idx - virtual_antecedent.sentence_idx)
+                match = Match(
+                    mention=mention_dict[mention_id],
+                    antecedent=virtual_antecedent,
+                    score=confidence,
+                    confidence=confidence,
+                    evidence_type="llm_direct",  # 标记为直接LLM结果
+                    sentence_distance=sentence_distance,
+                    is_conflict=False
+                )
+                matches.append(match)
+                
+                provenance.append({
+                    "mention": mention_text,
+                    "canonical": antecedent_text,
+                    "confidence": confidence,
+                    "evidence_type": "llm_direct",
+                    "rationale": f"LLM直接识别: {rationale}",
+                    "sentence_distance": sentence_distance,
+                    "mention_position": mention_dict[mention_id].position,
+                    "antecedent_position": closest_pos
+                })
+                
+                logger.info(f"[Stage1-LLM] LLM直接识别成功: '{mention_text}' -> '{antecedent_text}' (置信度: {confidence:.2f})")
+            else:
+                logger.warning(f"[Stage1-LLM] LLM返回的先行词 '{antecedent_text}' 在原文中不存在或在提及 '{mention_text}' 之后，跳过")
         
         # 添加括号别名
         alias_map.update(parenthesis_aliases)
@@ -1100,7 +1065,7 @@ class CoreferenceResolver:
         # 计算质量指标
         total_mentions = len(mentions)
         coverage = len(resolved_mentions) / total_mentions if total_mentions > 0 else 0.0
-        conflict = 0.0  # LLM 模式下假设无冲突（或从 LLM 返回中提取）
+        conflict = 0.0  # LLM 直接模式下假设无冲突
         
         # 分桶统计
         pronoun_mentions = [m for m in mentions if m.type == MentionType.PRONOUN]
@@ -1118,20 +1083,9 @@ class CoreferenceResolver:
             "total_mentions": total_mentions,
             "resolved_mentions": len(resolved_mentions),
             "total_matches": len(matches),
-            "conflict_matches": 0
+            "conflict_matches": 0,
+            "llm_mode": "direct"
         }
-        
-        # 如果没有生成 resolved_text，根据覆盖率决定是否生成
-        if not resolved_text and coverage >= 0.4:
-            # 生成 resolved_text：替换所有已消解的提及
-            resolved_text = text
-            for mention_text, canonical in alias_map.items():
-                if mention_text in resolved_mentions:
-                    # 使用正则替换，避免部分匹配
-                    pattern = r'\b' + re.escape(mention_text) + r'\b' if re.search(r'[a-zA-Z]', mention_text) else re.escape(mention_text)
-                    resolved_text = re.sub(pattern, canonical, resolved_text)
-        
-        logger.info(f"[Stage1-LLM] 解析完成: 覆盖率={coverage:.2%}, 别名映射数={len(alias_map)}, 匹配数={len(matches)}")
         
         return CorefResult(
             resolved_text=resolved_text,
