@@ -901,6 +901,8 @@ class CoreferenceResolver:
                 json_mode=True
             )
             
+            logger.debug(f"[Stage1-LLM] LLM原始响应: {response[:300]}...")
+            
             # 如果响应为空，返回 None
             if not response or not response.strip():
                 logger.warning(f"[Stage1-LLM] LLM 返回空响应")
@@ -909,7 +911,10 @@ class CoreferenceResolver:
             # 6. 解析 LLM 响应（尝试提取 JSON 部分）
             llm_result = self._parse_llm_json_response(response)
             if not llm_result:
+                logger.warning(f"[Stage1-LLM] LLM结果解析失败，返回None")
                 return None
+            
+            logger.debug(f"[Stage1-LLM] LLM结果解析成功: {type(llm_result)}")
             
             # 7. 转换为 CorefResult
             return self._parse_llm_result(text, mentions, antecedents, parenthesis_aliases, llm_result)
@@ -928,26 +933,39 @@ class CoreferenceResolver:
         
         处理可能包含非 JSON 文本的情况（如 markdown 代码块）
         """
+        logger.debug(f"[Stage1-LLM] 尝试解析JSON响应: {response[:200]}...")
+        
         try:
             # 直接尝试解析
-            return json.loads(response)
-        except json.JSONDecodeError:
+            result = json.loads(response)
+            logger.debug(f"[Stage1-LLM] 直接JSON解析成功")
+            return result
+        except json.JSONDecodeError as e:
+            logger.debug(f"[Stage1-LLM] 直接JSON解析失败: {e}")
             # 尝试提取 JSON 代码块
             import re
             # 匹配 ```json ... ``` 或 ``` ... ```
             json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
             if json_match:
+                logger.debug(f"[Stage1-LLM] 找到JSON代码块")
                 try:
-                    return json.loads(json_match.group(1))
-                except json.JSONDecodeError:
+                    result = json.loads(json_match.group(1))
+                    logger.debug(f"[Stage1-LLM] 代码块JSON解析成功")
+                    return result
+                except json.JSONDecodeError as e:
+                    logger.debug(f"[Stage1-LLM] 代码块JSON解析失败: {e}")
                     pass
             
             # 尝试提取第一个 { ... } 块
             brace_match = re.search(r'\{.*\}', response, re.DOTALL)
             if brace_match:
+                logger.debug(f"[Stage1-LLM] 找到大括号块")
                 try:
-                    return json.loads(brace_match.group(0))
-                except json.JSONDecodeError:
+                    result = json.loads(brace_match.group(0))
+                    logger.debug(f"[Stage1-LLM] 大括号块JSON解析成功")
+                    return result
+                except json.JSONDecodeError as e:
+                    logger.debug(f"[Stage1-LLM] 大括号块JSON解析失败: {e}")
                     pass
             
             logger.error(f"[Stage1-LLM] 无法解析 JSON 响应: {response[:500]}")
