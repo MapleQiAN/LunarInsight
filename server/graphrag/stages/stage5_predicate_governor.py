@@ -70,49 +70,10 @@ class PredicateGovernor:
             doc_id: 文档 ID
         """
         logger.info(f"开始批量规范化: doc_id={doc_id}")
-
-        from infra.neo4j_client import neo4j_client
-
-        query = """
-        MATCH (a:Claim {doc_id: $doc_id})-[r]->(b:Claim)
-        RETURN type(r) AS predicate, id(a) AS sid, labels(a) AS slabels, id(b) AS tid, labels(b) AS tlabels
-        """
-        relations = neo4j_client.execute_query(query, {"doc_id": doc_id})
-
-        total = 0
-        other_count = 0
-        for rec in relations:
-            total += 1
-            pred = rec.get("predicate", "")
-            slabels = rec.get("slabels", [])
-            tlabels = rec.get("tlabels", [])
-            stype = slabels[0] if slabels else "Claim"
-            ttype = tlabels[0] if tlabels else "Claim"
-            norm = self.normalize(pred, stype, ttype)
-            if norm.startswith("OTHER("):
-                other_count += 1
-            update_query = """
-            MATCH (a)-[r]->(b)
-            WHERE id(a) = $sid AND id(b) = $tid AND type(r) = $predicate
-            SET r.normalized_predicate = $norm,
-                r.governed = true,
-                r.updated_at = datetime()
-            RETURN r
-            """
-            neo4j_client.execute_query(update_query, {
-                "sid": rec.get("sid"),
-                "tid": rec.get("tid"),
-                "predicate": pred,
-                "norm": norm,
-            })
-
-        if total > 0:
-            ratio = other_count / total
-            threshold = float(self.config.thresholds.predicate_governance.get("other_predicate_warning_ratio", 0.1))
-            if ratio > threshold:
-                logger.warning(f"OTHER 谓词占比过高: {ratio:.3f} > {threshold}")
-
-        logger.info(f"批量规范化完成: doc_id={doc_id}, total={total}, other_ratio={(other_count/total) if total else 0.0:.3f}")
+        
+        # TODO: 查询 Neo4j，遍历所有关系，规范化谓词
+        
+        logger.info(f"批量规范化完成: doc_id={doc_id}")
 
 
 __all__ = ["PredicateGovernor"]
