@@ -575,17 +575,18 @@ class QueryService:
         
         # 加权融合
         source_weights = {
-            "theme": 0.3,
-            "vector": 0.2,
-            "keyword": 0.1,
-            "graph": 0.2,
-            "graph_expansion": 0.15
+            "theme": self.theme_weight,
+            "vector": self.vector_weight,
+            "keyword": self.keyword_weight,
+            "graph": self.graph_weight,
+            "graph_expansion": self.graph_weight * 0.8  # 扩展证据权重略低
         }
         
         # 计算综合分数
         for claim in claim_candidates:
             weight = source_weights.get(claim.source, 0.1)
-            claim.score = claim.score * weight + claim.confidence * 0.4
+            # 综合分数 = 来源分数 * 来源权重 + 置信度 * 0.3
+            claim.score = claim.score * weight + claim.confidence * 0.3
         
         # 按综合分数排序
         claim_candidates.sort(key=lambda x: x.score, reverse=True)
@@ -607,7 +608,6 @@ class QueryService:
             return {
                 "conclusion": "抱歉，未找到相关证据。",
                 "reasoning_chain": [],
-                "evidence": [],
                 "confidence": 0.0,
                 "caveats": "未找到相关证据"
             }
@@ -635,11 +635,9 @@ class QueryService:
         if low_confidence_count > 0:
             caveats = f"部分证据置信度较低（{low_confidence_count} 条）"
         
-        evidence_texts = [e.claim_text for e in evidence_candidates[:3] if e.claim_text]
         return {
             "conclusion": conclusion,
             "reasoning_chain": reasoning_chain,
-            "evidence": evidence_texts,
             "confidence": avg_confidence,
             "caveats": caveats
         }
