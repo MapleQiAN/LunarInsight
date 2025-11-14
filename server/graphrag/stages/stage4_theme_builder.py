@@ -11,12 +11,12 @@ import math
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
-from server.infra.neo4j_client import neo4j_client
-from server.graphrag.models.theme import Theme
-from server.graphrag.config import get_config
-from server.infra.ai_providers import AIProviderFactory, BaseAIClient
-from server.services.config_service import config_service
-from server.graphrag.utils.embedding import cosine_similarity
+from infra.neo4j_client import neo4j_client
+from graphrag.models.theme import Theme
+from graphrag.config import get_config
+from infra.ai_providers import AIProviderFactory, BaseAIClient
+from services.config_service import config_service
+from graphrag.utils.embedding import cosine_similarity
 
 logger = logging.getLogger("graphrag.stage4")
 
