@@ -8,15 +8,31 @@ import yaml
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from functools import lru_cache
+from enum import Enum
 
 # 配置文件目录
 CONFIG_DIR = Path(__file__).parent
+
+
+class ConstraintResult(Enum):
+    """类型约束检查结果"""
+    PASS = "pass"              # 通过：类型组合与标准谓词兼容
+    SOFT_VIOLATION = "soft"    # 软违规：不在推荐组合里，但可能合理
+    HARD_VIOLATION = "hard"    # 硬违规：明显违反本体规则
+
+
+class GovernanceStatus(Enum):
+    """治理状态"""
+    ACCEPTED = "accepted"      # 已接受
+    PENDING = "pending"        # 待复核
+    REJECTED = "rejected"      # 拒绝
 
 
 class PredicateConfig:
     """谓词配置"""
     
     def __init__(self, config: Dict[str, Any]):
+        self.version: str = config.get("version", "1.0.0")
         self.standard: List[str] = config.get("standard", [])
         self.mappings: Dict[str, str] = config.get("mappings", {})
         self.type_constraints: List[Dict[str, Any]] = config.get("type_constraints", [])
@@ -30,24 +46,60 @@ class PredicateConfig:
         """将自然语言谓词映射到标准谓词"""
         return self.mappings.get(natural_predicate)
     
-    def validate_type_constraint(self, source_type: str, predicate: str, target_type: str) -> bool:
-        """验证类型约束"""
+    def validate_type_constraint(self, source_type: str, predicate: str, target_type: str) -> ConstraintResult:
+        """验证类型约束，返回三级结果"""
+        # 检查硬违规：明显不合理的组合
+        hard_violations = [
+            # 方法不能是数据集的子类
+            ("Method", "IS_A", "Dataset"),
+            # 工具不能是概念的子类
+            ("Tool", "IS_A", "Concept"),
+            # 人物不能派生出方法
+            ("Person", "DERIVES_FROM", "Method"),
+            # 论断不能使用工具
+            ("Claim", "USES", "Tool"),
+        ]
+        
+        if (source_type, predicate, target_type) in hard_violations:
+            return ConstraintResult.HARD_VIOLATION
+        
+        # 检查白名单中的推荐组合
         for constraint in self.type_constraints:
             if (constraint["source"] == source_type and 
                 constraint["predicate"] == predicate):
                 allowed_targets = constraint["target"]
                 if isinstance(allowed_targets, list):
-                    return target_type in allowed_targets
+                    if target_type in allowed_targets:
+                        return ConstraintResult.PASS
                 else:
-                    return target_type == allowed_targets
-        # 如果没有找到约束，默认允许（保守策略）
-        return True
+                    if target_type == allowed_targets:
+                        return ConstraintResult.PASS
+        
+        # 不在推荐组合中，但也不是硬违规，标记为软违规
+        # 检查是否属于同一大类（如都是实体类型）
+        structural_predicates = {"IS_A", "PART_OF", "USES", "IMPLEMENTED_BY", "CREATES", "DERIVES_FROM", "CONTAINS", "BELONGS_TO"}
+        argumentative_predicates = {"SUPPORTS", "CONTRADICTS", "CAUSES", "COMPARES_WITH", "CONDITIONS", "PURPOSE"}
+        
+        entity_types = {"Concept", "Method", "Tool", "Person"}
+        claim_types = {"Claim", "Hypothesis"}
+        
+        # 检查是否跨域使用了谓词（软违规）
+        if predicate in structural_predicates:
+            if source_type in claim_types or target_type in claim_types:
+                return ConstraintResult.SOFT_VIOLATION
+        elif predicate in argumentative_predicates:
+            if source_type in entity_types and target_type in entity_types:
+                return ConstraintResult.SOFT_VIOLATION
+        
+        # 其他情况也标记为软违规
+        return ConstraintResult.SOFT_VIOLATION
 
 
 class OntologyConfig:
     """本体配置"""
     
     def __init__(self, config: Dict[str, Any]):
+        self.version: str = config.get("version", "1.0.0")
         self.node_types: Dict[str, Any] = config.get("node_types", {})
         self.relationship_types: Dict[str, Any] = config.get("relationship_types", {})
         self.domain_constraints: Dict[str, Any] = config.get("domain_constraints", {})
@@ -146,6 +198,8 @@ def get_config() -> GraphRAGConfig:
 
 # 导出
 __all__ = [
+    "ConstraintResult",
+    "GovernanceStatus",
     "PredicateConfig",
     "OntologyConfig",
     "ThresholdConfig",
