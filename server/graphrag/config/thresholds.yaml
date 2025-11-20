@@ -43,35 +43,72 @@ claim_extraction:
 
 # 阶段 4: 主题社区
 theme_building:
-  # Louvain 算法参数
+  # Louvain 算法参数（优化）
   louvain:
     resolution: 1.0           # 分辨率（越高社区越细）
-    max_iterations: 100
-    tolerance: 0.0001
+    max_iterations: 50        # 减少迭代次数（通常50次足够收敛）
+    tolerance: 0.001          # 放宽容忍度（加速收敛）
+    random_seed: 42           # 随机种子（保证可复现）
+    concurrency: 4            # GDS 并发线程数
   
-  # 多尺度社区检测
+  # 多尺度社区检测（优化）
   multi_scale:
     enabled: true            # 是否启用多尺度检测
     level1_resolution: 0.5    # Level 1 粗粒度分辨率
     level2_resolution: 1.5    # Level 2 细粒度分辨率
     level1_min_themes: 3      # Level 1 最小主题数
-    level1_max_themes: 8      # Level 1 最大主题数
-    level2_min_themes: 3      # Level 2 每个父主题的最小子主题数
-    level2_max_themes: 10     # Level 2 每个父主题的最大子主题数
+    level1_max_themes: 10     # Level 1 最大主题数（适度放宽）
+    level1_optimal_range: [5, 8]  # Level 1 最优范围
+    level2_min_themes: 2      # Level 2 每个父主题的最小子主题数（降低限制）
+    level2_max_themes: 12     # Level 2 每个父主题的最大子主题数
+    level2_optimal_range: [4, 8]  # Level 2 最优范围
+    
+    # 分辨率自适应调整策略
+    resolution_adjustment:
+      method: "binary_search"  # binary_search | golden_section | fixed_multiplier
+      max_iterations: 5        # 最大调整次数
+      tolerance: 1             # 主题数量容差
+    
+    # 社区质量过滤
+    quality_filter:
+      enabled: false           # 暂不启用（待实现）
+      min_modularity: 0.3      # 最小模块度
+      min_internal_density: 0.2  # 最小内部密度
+      max_external_connections: 0.3  # 最大外部连接比例
   
-  # 关系权重融合参数
+  # 关系权重融合参数（优化）
   relation_weights:
     cooccur_weight: 0.4       # 共现权重 α
     semantic_weight: 0.4     # 语义相似度权重 β
     claim_weight: 0.2        # 论断共现权重 γ
-    min_weight_threshold: 0.1 # 最小权重阈值（低于此值不创建边）
-    max_edges_per_node: 10   # 每个节点最多保留的边数（top-k）
+    min_weight_threshold: 0.15  # 最小权重阈值（提高阈值，减少噪声边）
+    max_edges_per_node: 15   # 每个节点最多保留的边数（适度增加）
+    degree_normalization: false  # 度归一化（暂不启用，待实现）
+    min_degree_threshold: 2  # 最小度数要求
   
-  # 主题卡片参数
+  # 主题卡片参数（优化）
   summary:
-    max_concepts_per_summary: 10    # 每个主题摘要的最大概念数
-    max_claims_per_summary: 5       # 每个主题摘要的最大论断数
-    summary_max_length: 500         # 摘要最大长度
+    max_concepts_per_summary: 12    # 每个主题摘要的最大概念数（适度增加）
+    max_claims_per_summary: 6       # 每个主题摘要的最大论断数
+    summary_max_length: 600         # 摘要最大长度
+    
+    # 批量生成配置
+    batch_generation:
+      enabled: true            # 是否启用批量生成
+      batch_size: 5            # 每批处理5个主题
+      max_concurrent_batches: 2  # 最多2批并发
+    
+    # 摘要缓存
+    cache:
+      enabled: false           # 暂不启用（待实现Redis集成）
+      ttl: 86400               # 24小时
+      similarity_threshold: 0.9  # 社区成员相似度阈值（用于缓存命中）
+    
+    # 摘要质量过滤
+    quality_filter:
+      min_length: 50           # 最小摘要长度
+      max_repetition: 0.3      # 最大重复率
+      require_keywords: true   # 必须包含关键词
   
   # 社区大小过滤
   min_community_size: 3      # 最小社区成员数
@@ -190,20 +227,39 @@ embedding:
   model: "text-embedding-3-small"
   dimension: 1536
 
-# 性能控制
+# 性能控制（优化）
 performance:
-  # LLM 调用并发数
-  llm_concurrency: 5
+  # LLM 调用并发数（优化）
+  llm_concurrency: 10         # 提高并发数（根据API限制调整）
+  llm_batch_size: 5           # 批量调用大小
+  llm_timeout: 60             # 增加超时（批量调用可能更慢）
+  llm_retry:
+    max_retries: 3            # 最大重试次数
+    backoff_factor: 2         # 退避因子
+    retry_on: ["rate_limit", "timeout", "server_error"]  # 重试条件
   
-  # 批量写入大小
-  batch_write_size: 100
+  # Neo4j 批量写入优化
+  batch_write_size: 200       # 增加批量大小
+  batch_write_concurrency: 4  # 并发写入数
+  
+  # 向量计算优化
+  vector_computation:
+    use_gpu: false            # 如有GPU可启用
+    chunk_size: 1000          # 向量计算分块大小
+    parallel_workers: 4       # 并行工作线程数
+  
+  # 内存优化
+  memory:
+    max_graph_size: 10000     # 最大图节点数（超过则采样）
+    sampling_ratio: 0.8       # 采样比例
+    cache_size_mb: 512        # 缓存大小（MB）
   
   # 最大处理文档大小（字节）
   max_document_size: 10485760  # 10 MB
   
   # 超时设置
   timeouts:
-    llm_call: 30              # LLM 调用超时（秒）
+    llm_call: 60              # LLM 调用超时（秒，增加以支持批量调用）
     neo4j_query: 60           # Neo4j 查询超时（秒）
     total_processing: 1200    # 总处理超时（秒，20 分钟）
 

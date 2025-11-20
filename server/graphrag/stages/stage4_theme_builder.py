@@ -11,6 +11,7 @@ import math
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from infra.neo4j_client import neo4j_client
 from graphrag.models.theme import Theme
 from graphrag.config import get_config
@@ -80,27 +81,26 @@ class ThemeBuilder:
                 graph_name, doc_id, build_version
             )
         else:
-            # 单尺度社区检测（原有逻辑）
+            # 单尺度社区检测（优化：使用批量处理）
             communities = self._detect_communities(graph_name, doc_id)
             
-            # 为每个社区生成主题摘要
-            themes = []
+            # 批量创建主题
+            theme_data_list = []
             for community_id, members in communities.items():
                 if len(members) < self.thresholds.get("min_community_size", 3):
                     continue
-                
-                theme = self._create_theme(
-                    community_id=community_id,
-                    members=members,
-                    doc_id=doc_id,
-                    build_version=build_version,
-                    level=1,
-                    parent_theme_id=None
-                )
-                if theme:
-                    themes.append(theme)
-                    # 存储到 Neo4j
-                    self._store_theme(theme)
+                theme_data_list.append({
+                    "community_id": community_id,
+                    "members": members,
+                    "level": 1,
+                    "parent_theme_id": None
+                })
+            
+            themes = self._batch_create_themes(
+                theme_data_list=theme_data_list,
+                doc_id=doc_id,
+                build_version=build_version
+            )
         
         # 3. 清理临时图投影
         self._drop_graph(graph_name)
@@ -400,33 +400,51 @@ class ThemeBuilder:
             # 尝试使用 GDS Louvain 算法
             louvain_config = self.thresholds.get("louvain", {})
             resolution = louvain_config.get("resolution", 1.0)
+            max_iterations = louvain_config.get("max_iterations", 50)
+            tolerance = louvain_config.get("tolerance", 0.001)
             
             query = f"""
             CALL gds.louvain.stream('{graph_name}', {{
-                resolution: $resolution
+                resolution: $resolution,
+                maxIterations: $max_iterations,
+                tolerance: $tolerance
             }})
             YIELD nodeId, communityId
             RETURN nodeId, communityId
             """
             
-            results = neo4j_client.execute_query(query, {"resolution": resolution})
+            results = neo4j_client.execute_query(query, {
+                "resolution": resolution,
+                "max_iterations": max_iterations,
+                "tolerance": tolerance
+            })
             
-            # 将 nodeId 映射到 Concept name
+            # 批量收集所有 nodeId
+            node_community_map = {}  # nodeId -> communityId
+            all_node_ids = []
             for record in results:
                 node_id = record.get("nodeId")
                 community_id = str(record.get("communityId"))
-                
-                # 查询 Concept name
+                if node_id is not None:
+                    node_community_map[node_id] = community_id
+                    all_node_ids.append(node_id)
+            
+            # 批量查询所有 Concept name（优化：避免N+1查询）
+            if all_node_ids:
                 concept_query = """
                 MATCH (c:Concept)
-                WHERE id(c) = $node_id
-                RETURN c.name AS name
+                WHERE id(c) IN $node_ids
+                RETURN id(c) AS node_id, c.name AS name
                 """
-                concept_results = neo4j_client.execute_query(concept_query, {"node_id": node_id})
+                concept_results = neo4j_client.execute_query(concept_query, {"node_ids": all_node_ids})
                 
-                if concept_results:
-                    concept_name = concept_results[0].get("name")
-                    if concept_name:
+                # 建立映射
+                for record in concept_results:
+                    node_id = record.get("node_id")
+                    concept_name = record.get("name")
+                    community_id = node_community_map.get(node_id)
+                    
+                    if concept_name and community_id:
                         if community_id not in communities:
                             communities[community_id] = []
                         communities[community_id].append(concept_name)
@@ -519,26 +537,34 @@ class ThemeBuilder:
         
         logger.info(f"Level 1 检测完成: {len(level1_communities)} 个粗粒度主题")
         
-        # 为 Level 1 主题创建 Theme 对象
+        # 为 Level 1 主题创建 Theme 对象（批量处理）
         level1_themes = []
         level1_theme_map = {}  # community_id -> Theme
         
+        # 批量创建 Level 1 主题
+        level1_theme_data = []
         for community_id, members in level1_communities.items():
             if len(members) < self.thresholds.get("min_community_size", 3):
                 continue
-            
-            theme = self._create_theme(
-                community_id=f"L1_{community_id}",
-                members=members,
-                doc_id=doc_id,
-                build_version=build_version,
-                level=1,
-                parent_theme_id=None
-            )
-            if theme:
-                level1_themes.append(theme)
-                level1_theme_map[community_id] = theme
-                self._store_theme(theme)
+            level1_theme_data.append({
+                "community_id": f"L1_{community_id}",
+                "members": members,
+                "level": 1,
+                "parent_theme_id": None
+            })
+        
+        # 批量创建主题（优化：批量查询 + 批量生成）
+        level1_themes = self._batch_create_themes(
+            theme_data_list=level1_theme_data,
+            doc_id=doc_id,
+            build_version=build_version
+        )
+        
+        # 建立映射
+        for theme in level1_themes:
+            # 从 community_id 提取原始 ID（去掉 L1_ 前缀）
+            orig_id = theme.community_id.replace("L1_", "") if theme.community_id.startswith("L1_") else theme.community_id
+            level1_theme_map[orig_id] = theme
         
         # Level 2: 细粒度子主题检测
         all_themes = level1_themes.copy()
@@ -567,22 +593,25 @@ class ThemeBuilder:
                 f"发现 {len(level2_communities)} 个子主题"
             )
             
-            # 为 Level 2 子主题创建 Theme 对象
+            # 为 Level 2 子主题创建 Theme 对象（批量处理）
+            level2_theme_data = []
             for level2_community_id, level2_members in level2_communities.items():
                 if len(level2_members) < level2_config.get("level2_min_themes", 3):
                     continue
-                
-                theme = self._create_theme(
-                    community_id=f"L2_{level1_community_id}_{level2_community_id}",
-                    members=level2_members,
-                    doc_id=doc_id,
-                    build_version=build_version,
-                    level=2,
-                    parent_theme_id=parent_theme.id
-                )
-                if theme:
-                    all_themes.append(theme)
-                    self._store_theme(theme)
+                level2_theme_data.append({
+                    "community_id": f"L2_{level1_community_id}_{level2_community_id}",
+                    "members": level2_members,
+                    "level": 2,
+                    "parent_theme_id": parent_theme.id
+                })
+            
+            # 批量创建 Level 2 主题
+            level2_themes = self._batch_create_themes(
+                theme_data_list=level2_theme_data,
+                doc_id=doc_id,
+                build_version=build_version
+            )
+            all_themes.extend(level2_themes)
         
         logger.info(f"多尺度检测完成: Level 1={len(level1_themes)}, Level 2={len(all_themes) - len(level1_themes)}")
         return all_themes
@@ -607,32 +636,53 @@ class ThemeBuilder:
         communities = {}
         
         try:
-            # 使用 GDS Louvain 算法
+            # 使用 GDS Louvain 算法（应用优化参数）
+            louvain_config = self.thresholds.get("louvain", {})
+            max_iterations = louvain_config.get("max_iterations", 50)
+            tolerance = louvain_config.get("tolerance", 0.001)
+            
             query = f"""
             CALL gds.louvain.stream('{graph_name}', {{
-                resolution: $resolution
+                resolution: $resolution,
+                maxIterations: $max_iterations,
+                tolerance: $tolerance
             }})
             YIELD nodeId, communityId
             RETURN nodeId, communityId
             """
             
-            results = neo4j_client.execute_query(query, {"resolution": level1_resolution})
+            results = neo4j_client.execute_query(query, {
+                "resolution": level1_resolution,
+                "max_iterations": max_iterations,
+                "tolerance": tolerance
+            })
             
-            # 将 nodeId 映射到 Concept name
+            # 批量收集所有 nodeId（优化：避免N+1查询）
+            node_community_map = {}  # nodeId -> communityId
+            all_node_ids = []
             for record in results:
                 node_id = record.get("nodeId")
                 community_id = str(record.get("communityId"))
-                
+                if node_id is not None:
+                    node_community_map[node_id] = community_id
+                    all_node_ids.append(node_id)
+            
+            # 批量查询所有 Concept name
+            if all_node_ids:
                 concept_query = """
                 MATCH (c:Concept)
-                WHERE id(c) = $node_id
-                RETURN c.name AS name
+                WHERE id(c) IN $node_ids
+                RETURN id(c) AS node_id, c.name AS name
                 """
-                concept_results = neo4j_client.execute_query(concept_query, {"node_id": node_id})
+                concept_results = neo4j_client.execute_query(concept_query, {"node_ids": all_node_ids})
                 
-                if concept_results:
-                    concept_name = concept_results[0].get("name")
-                    if concept_name:
+                # 建立映射
+                for record in concept_results:
+                    node_id = record.get("node_id")
+                    concept_name = record.get("name")
+                    community_id = node_community_map.get(node_id)
+                    
+                    if concept_name and community_id:
                         if community_id not in communities:
                             communities[community_id] = []
                         communities[community_id].append(concept_name)
@@ -797,35 +847,56 @@ class ThemeBuilder:
             
             neo4j_client.execute_query(create_subgraph_query, {})
             
-            # 在子图上运行 Louvain
+            # 在子图上运行 Louvain（应用优化参数）
+            louvain_config = self.thresholds.get("louvain", {})
+            max_iterations = louvain_config.get("max_iterations", 50)
+            tolerance = louvain_config.get("tolerance", 0.001)
+            
             query = f"""
             CALL gds.louvain.stream('{subgraph_name}', {{
-                resolution: $resolution
+                resolution: $resolution,
+                maxIterations: $max_iterations,
+                tolerance: $tolerance
             }})
             YIELD nodeId, communityId
             RETURN nodeId, communityId
             """
             
-            results = neo4j_client.execute_query(query, {"resolution": level2_resolution})
+            results = neo4j_client.execute_query(query, {
+                "resolution": level2_resolution,
+                "max_iterations": max_iterations,
+                "tolerance": tolerance
+            })
             
-            # 将 nodeId 映射到 Concept name
+            # 批量收集所有 nodeId（优化：避免N+1查询）
+            node_community_map = {}  # nodeId -> communityId
+            all_node_ids = []
             for record in results:
                 node_id = record.get("nodeId")
                 community_id = str(record.get("communityId"))
-                
+                if node_id is not None:
+                    node_community_map[node_id] = community_id
+                    all_node_ids.append(node_id)
+            
+            # 批量查询所有 Concept name
+            if all_node_ids:
                 concept_query = """
                 MATCH (c:Concept)
-                WHERE id(c) = $node_id AND c.name IN $member_names
-                RETURN c.name AS name
+                WHERE id(c) IN $node_ids AND c.name IN $member_names
+                RETURN id(c) AS node_id, c.name AS name
                 """
                 concept_results = neo4j_client.execute_query(
                     concept_query,
-                    {"node_id": node_id, "member_names": level1_members}
+                    {"node_ids": all_node_ids, "member_names": level1_members}
                 )
                 
-                if concept_results:
-                    concept_name = concept_results[0].get("name")
-                    if concept_name:
+                # 建立映射
+                for record in concept_results:
+                    node_id = record.get("node_id")
+                    concept_name = record.get("name")
+                    community_id = node_community_map.get(node_id)
+                    
+                    if concept_name and community_id:
                         if community_id not in communities:
                             communities[community_id] = []
                         communities[community_id].append(concept_name)
@@ -867,6 +938,120 @@ class ThemeBuilder:
                 logger.debug(f"Level 2 使用简化分割: {len(communities)} 个子社区")
         
         return communities
+    
+    def _batch_create_themes(
+        self,
+        theme_data_list: List[Dict[str, Any]],
+        doc_id: str,
+        build_version: str
+    ) -> List[Theme]:
+        """
+        批量创建主题（优化：批量查询 + 批量LLM生成 + 批量存储）
+        
+        Args:
+            theme_data_list: 主题数据列表，每个元素包含：
+                - community_id: 社区ID
+                - members: 成员列表
+                - level: 层级
+                - parent_theme_id: 父主题ID（可选）
+            doc_id: 文档ID
+            build_version: 构建版本
+        
+        Returns:
+            主题列表
+        """
+        if not theme_data_list:
+            return []
+        
+        logger.info(f"批量创建主题: {len(theme_data_list)} 个主题")
+        
+        # 1. 收集所有概念名称（用于批量查询）
+        all_concept_names = []
+        for theme_data in theme_data_list:
+            all_concept_names.extend(theme_data["members"])
+        all_concept_names = list(set(all_concept_names))
+        
+        # 2. 批量获取所有社区的内容
+        # 注意：这里简化处理，每个社区单独查询（因为需要按社区分组）
+        # 未来可以进一步优化为真正的批量查询
+        community_contents = {}
+        for theme_data in theme_data_list:
+            members = theme_data["members"]
+            concepts, claims, relations = self._get_community_content(members, doc_id)
+            community_contents[theme_data["community_id"]] = {
+                "concepts": concepts,
+                "claims": claims,
+                "relations": relations
+            }
+        
+        # 3. 批量生成主题摘要（LLM批量调用）
+        summary_config = self.thresholds.get("summary", {})
+        batch_config = summary_config.get("batch_generation", {})
+        batch_enabled = batch_config.get("enabled", False)
+        batch_size = batch_config.get("batch_size", 5)
+        
+        if batch_enabled and self.ai_client:
+            # 批量生成摘要
+            theme_summaries = self._batch_generate_theme_summaries(
+                theme_data_list=theme_data_list,
+                community_contents=community_contents,
+                batch_size=batch_size
+            )
+        else:
+            # 单个生成（回退）
+            theme_summaries = {}
+            for theme_data in theme_data_list:
+                community_id = theme_data["community_id"]
+                content = community_contents.get(community_id, {})
+                summary = self._generate_theme_summary(
+                    community_id=community_id,
+                    concepts=content.get("concepts", []),
+                    claims=content.get("claims", []),
+                    relations=content.get("relations", [])
+                )
+                if summary:
+                    theme_summaries[community_id] = summary
+        
+        # 4. 创建 Theme 对象
+        themes = []
+        for theme_data in theme_data_list:
+            community_id = theme_data["community_id"]
+            members = theme_data["members"]
+            content = community_contents.get(community_id, {})
+            summary = theme_summaries.get(community_id)
+            
+            if not summary:
+                logger.warning(f"主题 {community_id} 无法生成摘要，跳过")
+                continue
+            
+            if not content.get("concepts"):
+                logger.warning(f"主题 {community_id} 没有概念，跳过")
+                continue
+            
+            theme_id = self._generate_theme_id(community_id, doc_id, theme_data["level"])
+            
+            theme = Theme(
+                id=theme_id,
+                label=summary.get("label", f"主题 {community_id}"),
+                summary=summary.get("summary", ""),
+                level=theme_data["level"],
+                keywords=summary.get("keywords", []),
+                community_id=community_id,
+                member_count=len(members),
+                concept_ids=members[:10],
+                claim_ids=[c.get("id") for c in content.get("claims", [])[:5]],
+                key_evidence=summary.get("key_evidence", []),
+                parent_theme_id=theme_data.get("parent_theme_id"),
+                build_version=build_version
+            )
+            themes.append(theme)
+        
+        # 5. 批量存储主题
+        if themes:
+            self._batch_store_themes(themes)
+        
+        logger.info(f"批量创建主题完成: {len(themes)} 个主题")
+        return themes
     
     def _create_theme(
         self,
@@ -939,6 +1124,9 @@ class ThemeBuilder:
         claims = []
         relations = []
         
+        # 限制概念数量（避免查询过大）
+        limited_concept_names = concept_names[:20]
+        
         # 查询概念
         concept_query = """
         MATCH (c:Concept)
@@ -948,7 +1136,7 @@ class ThemeBuilder:
         """
         concept_results = neo4j_client.execute_query(
             concept_query,
-            {"concept_names": concept_names[:20]}
+            {"concept_names": limited_concept_names}
         )
         concepts = [dict(r) for r in concept_results]
         
@@ -962,7 +1150,7 @@ class ThemeBuilder:
         """
         claim_results = neo4j_client.execute_query(
             claim_query,
-            {"concept_names": concept_names[:20], "doc_id": doc_id}
+            {"concept_names": limited_concept_names, "doc_id": doc_id}
         )
         claims = [dict(r) for r in claim_results]
         
@@ -975,11 +1163,286 @@ class ThemeBuilder:
         """
         relation_results = neo4j_client.execute_query(
             relation_query,
-            {"concept_names": concept_names[:20]}
+            {"concept_names": limited_concept_names}
         )
         relations = [dict(r) for r in relation_results]
         
         return concepts, claims, relations
+    
+    def _batch_get_community_content(
+        self,
+        all_concept_names: List[str],
+        doc_id: str
+    ) -> Dict[str, Tuple[List[Dict], List[Dict], List[Dict]]]:
+        """
+        批量获取多个社区的内容（优化：一次性查询所有概念/论断/关系）
+        
+        Args:
+            all_concept_names: 所有社区的概念名称列表（去重）
+            doc_id: 文档 ID
+        
+        Returns:
+            Dict[concept_name, (concepts, claims, relations)]
+        """
+        logger.debug(f"批量获取社区内容: {len(all_concept_names)} 个概念")
+        
+        # 去重并限制数量
+        unique_concept_names = list(set(all_concept_names))[:100]  # 最多100个概念
+        
+        # 1. 批量查询所有概念
+        concept_query = """
+        MATCH (c:Concept)
+        WHERE c.name IN $concept_names
+        RETURN c.name AS name, c.description AS description, c.domain AS domain
+        """
+        concept_results = neo4j_client.execute_query(
+            concept_query,
+            {"concept_names": unique_concept_names}
+        )
+        all_concepts = {r.get("name"): dict(r) for r in concept_results}
+        
+        # 2. 批量查询所有相关论断
+        claim_query = """
+        MATCH (c:Concept)<-[:MENTIONS]-(ch:Chunk)-[:CONTAINS_CLAIM]->(cl:Claim)
+        WHERE c.name IN $concept_names AND ch.doc_id = $doc_id
+        WITH c.name AS concept_name, cl.id AS id, cl.text AS text, cl.confidence AS confidence
+        ORDER BY cl.confidence DESC
+        RETURN concept_name, collect({
+            id: id,
+            text: text,
+            confidence: confidence
+        }) AS claims
+        """
+        claim_results = neo4j_client.execute_query(
+            claim_query,
+            {"concept_names": unique_concept_names, "doc_id": doc_id}
+        )
+        all_claims = {}
+        for r in claim_results:
+            concept_name = r.get("concept_name")
+            claims = r.get("claims", [])[:10]  # 每个概念最多10个论断
+            all_claims[concept_name] = claims
+        
+        # 3. 批量查询所有关系
+        relation_query = """
+        MATCH (c1:Concept)-[r]->(c2:Concept)
+        WHERE c1.name IN $concept_names AND c2.name IN $concept_names
+        WITH c1.name AS source, collect({
+            type: type(r),
+            target: c2.name
+        }) AS relations
+        RETURN source, relations
+        """
+        relation_results = neo4j_client.execute_query(
+            relation_query,
+            {"concept_names": unique_concept_names}
+        )
+        all_relations = {}
+        for r in relation_results:
+            source = r.get("source")
+            relations = r.get("relations", [])[:20]  # 每个概念最多20个关系
+            all_relations[source] = relations
+        
+        # 4. 为每个社区组装内容
+        result = {}
+        for concept_name in unique_concept_names:
+            # 获取该概念的信息
+            concept_info = all_concepts.get(concept_name, {})
+            concepts = [concept_info] if concept_info else []
+            
+            # 获取该概念的论断
+            claims = all_claims.get(concept_name, [])
+            
+            # 获取该概念的关系
+            relations = all_relations.get(concept_name, [])
+            
+            result[concept_name] = (concepts, claims, relations)
+        
+        return result
+    
+    def _batch_generate_theme_summaries(
+        self,
+        theme_data_list: List[Dict[str, Any]],
+        community_contents: Dict[str, Dict[str, List[Dict]]],
+        batch_size: int = 5
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        批量生成主题摘要（优化：批量LLM调用）
+        
+        Args:
+            theme_data_list: 主题数据列表
+            community_contents: 社区内容字典 {community_id: {concepts, claims, relations}}
+            batch_size: 每批处理的主题数
+        
+        Returns:
+            Dict[community_id, theme_summary]
+        """
+        if not self.ai_client:
+            logger.warning("AI 客户端未初始化，使用默认主题摘要")
+            return {
+                theme_data["community_id"]: self._default_theme_summary(
+                    community_contents.get(theme_data["community_id"], {}).get("concepts", []),
+                    community_contents.get(theme_data["community_id"], {}).get("claims", [])
+                )
+                for theme_data in theme_data_list
+            }
+        
+        logger.info(f"批量生成主题摘要: {len(theme_data_list)} 个主题，批次大小={batch_size}")
+        
+        # 加载 Prompt 模板
+        prompt_template_path = Path(__file__).parent.parent / "prompts" / "theme_summary.txt"
+        try:
+            with open(prompt_template_path, "r", encoding="utf-8") as f:
+                prompt_template = f.read()
+        except Exception as e:
+            logger.error(f"无法加载 Prompt 模板: {e}")
+            return {
+                theme_data["community_id"]: self._default_theme_summary(
+                    community_contents.get(theme_data["community_id"], {}).get("concepts", []),
+                    community_contents.get(theme_data["community_id"], {}).get("claims", [])
+                )
+                for theme_data in theme_data_list
+            }
+        
+        summary_config = self.thresholds.get("summary", {})
+        max_concepts = summary_config.get("max_concepts_per_summary", 12)
+        max_claims = summary_config.get("max_claims_per_summary", 6)
+        
+        all_summaries = {}
+        
+        # 分批处理
+        for i in range(0, len(theme_data_list), batch_size):
+            batch = theme_data_list[i:i + batch_size]
+            logger.debug(f"处理批次 {i // batch_size + 1}: {len(batch)} 个主题")
+            
+            # 构建批量 Prompt（每个主题一个独立的用户消息）
+            batch_messages = []
+            batch_community_ids = []
+            
+            for theme_data in batch:
+                community_id = theme_data["community_id"]
+                content = community_contents.get(community_id, {})
+                concepts = content.get("concepts", [])
+                claims = content.get("claims", [])
+                relations = content.get("relations", [])
+                
+                # 格式化 Prompt
+                concepts_text = "\n".join([
+                    f"- {c.get('name', '')}: {c.get('description', '无描述')}"
+                    for c in concepts[:max_concepts]
+                ])
+                
+                claims_text = "\n".join([
+                    f"- \"{c.get('text', '')}\""
+                    for c in claims[:max_claims]
+                ])
+                
+                relations_text = "\n".join([
+                    f"- {r.get('source', '')} -[{r.get('type', '')}]-> {r.get('target', '')}"
+                    for r in relations[:10]
+                ])
+                
+                prompt = prompt_template.format(
+                    community_id=community_id,
+                    concepts=concepts_text or "无概念",
+                    claims=claims_text or "无论断",
+                    relations=relations_text or "无关系"
+                )
+                
+                batch_messages.append({
+                    "role": "user",
+                    "content": f"## 主题 {community_id}\n\n{prompt}"
+                })
+                batch_community_ids.append(community_id)
+            
+            # 批量调用 LLM（如果支持批量，否则并发调用）
+            try:
+                # 尝试批量调用（如果AI客户端支持）
+                if hasattr(self.ai_client, 'batch_chat_completion'):
+                    responses = self.ai_client.batch_chat_completion(
+                        messages_list=[
+                            [
+                                {"role": "system", "content": "你是一个专业的知识图谱分析专家。"},
+                                msg
+                            ]
+                            for msg in batch_messages
+                        ],
+                        temperature=0.3
+                    )
+                else:
+                    # 回退：并发调用
+                    performance_config = self.config.thresholds.get("performance", {})
+                    max_workers = performance_config.get("llm_concurrency", 10)
+                    
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        futures = {}
+                        for idx, (community_id, msg) in enumerate(zip(batch_community_ids, batch_messages)):
+                            future = executor.submit(
+                                self.ai_client.chat_completion,
+                                messages=[
+                                    {"role": "system", "content": "你是一个专业的知识图谱分析专家。"},
+                                    msg
+                                ],
+                                temperature=0.3
+                            )
+                            futures[future] = (community_id, idx)
+                        
+                        responses = [None] * len(batch)
+                        for future in as_completed(futures):
+                            community_id, idx = futures[future]
+                            try:
+                                responses[idx] = future.result()
+                            except Exception as e:
+                                logger.error(f"生成主题摘要失败 {community_id}: {e}")
+                                responses[idx] = None
+                
+                # 解析响应
+                for idx, (community_id, response) in enumerate(zip(batch_community_ids, responses)):
+                    if not response:
+                        # 使用默认摘要
+                        content = community_contents.get(community_id, {})
+                        all_summaries[community_id] = self._default_theme_summary(
+                            content.get("concepts", []),
+                            content.get("claims", [])
+                        )
+                        continue
+                    
+                    # 解析 JSON 响应
+                    json_start = response.find("{")
+                    json_end = response.rfind("}") + 1
+                    if json_start >= 0 and json_end > json_start:
+                        try:
+                            json_str = response[json_start:json_end]
+                            theme_data = json.loads(json_str)
+                            all_summaries[community_id] = theme_data
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"解析主题摘要 JSON 失败 {community_id}: {e}")
+                            content = community_contents.get(community_id, {})
+                            all_summaries[community_id] = self._default_theme_summary(
+                                content.get("concepts", []),
+                                content.get("claims", [])
+                            )
+                    else:
+                        logger.warning(f"LLM 响应中未找到 JSON {community_id}，使用默认摘要")
+                        content = community_contents.get(community_id, {})
+                        all_summaries[community_id] = self._default_theme_summary(
+                            content.get("concepts", []),
+                            content.get("claims", [])
+                        )
+                        
+            except Exception as e:
+                logger.error(f"批量生成主题摘要失败: {e}")
+                # 回退到默认摘要
+                for theme_data in batch:
+                    community_id = theme_data["community_id"]
+                    content = community_contents.get(community_id, {})
+                    all_summaries[community_id] = self._default_theme_summary(
+                        content.get("concepts", []),
+                        content.get("claims", [])
+                    )
+        
+        logger.info(f"批量生成主题摘要完成: {len(all_summaries)} 个摘要")
+        return all_summaries
     
     def _generate_theme_summary(
         self,
@@ -988,7 +1451,7 @@ class ThemeBuilder:
         claims: List[Dict],
         relations: List[Dict]
     ) -> Optional[Dict[str, Any]]:
-        """使用 LLM 生成主题摘要"""
+        """使用 LLM 生成单个主题摘要（兼容旧代码）"""
         if not self.ai_client:
             logger.warning("AI 客户端未初始化，使用默认主题摘要")
             return self._default_theme_summary(concepts, claims)
@@ -1003,14 +1466,18 @@ class ThemeBuilder:
             return self._default_theme_summary(concepts, claims)
         
         # 格式化 Prompt
+        summary_config = self.thresholds.get("summary", {})
+        max_concepts = summary_config.get("max_concepts_per_summary", 12)
+        max_claims = summary_config.get("max_claims_per_summary", 6)
+        
         concepts_text = "\n".join([
             f"- {c.get('name', '')}: {c.get('description', '无描述')}"
-            for c in concepts[:self.thresholds.get("summary", {}).get("max_concepts_per_summary", 10)]
+            for c in concepts[:max_concepts]
         ])
         
         claims_text = "\n".join([
             f"- \"{c.get('text', '')}\""
-            for c in claims[:self.thresholds.get("summary", {}).get("max_claims_per_summary", 5)]
+            for c in claims[:max_claims]
         ])
         
         relations_text = "\n".join([
@@ -1074,63 +1541,101 @@ class ThemeBuilder:
             ]
         }
     
-    def _store_theme(self, theme: Theme):
-        """存储 Theme 节点到 Neo4j"""
-        logger.debug(f"存储主题: {theme.id}")
+    def _batch_store_themes(self, themes: List[Theme]):
+        """批量存储主题到 Neo4j（优化：批量写入）"""
+        if not themes:
+            return
         
-        query = """
-        MERGE (t:Theme {id: $id})
-        SET t.label = $label,
-            t.summary = $summary,
-            t.level = $level,
-            t.keywords = $keywords,
-            t.community_id = $community_id,
-            t.member_count = $member_count,
-            t.concept_ids = $concept_ids,
-            t.claim_ids = $claim_ids,
-            t.key_evidence = $key_evidence,
-            t.build_version = $build_version,
-            t.updated_at = datetime()
-        ON CREATE SET
-            t.created_at = datetime()
-        """
+        logger.debug(f"批量存储主题: {len(themes)} 个主题")
         
-        neo4j_client.execute_query(query, {
-            "id": theme.id,
-            "label": theme.label,
-            "summary": theme.summary,
-            "level": theme.level,
-            "keywords": theme.keywords,
-            "community_id": theme.community_id,
-            "member_count": theme.member_count,
-            "concept_ids": theme.concept_ids,
-            "claim_ids": theme.claim_ids,
-            "key_evidence": json.dumps(theme.key_evidence) if theme.key_evidence else None,
-            "build_version": theme.build_version
-        })
+        # 1. 批量创建/更新 Theme 节点
+        performance_config = self.config.thresholds.get("performance", {})
+        batch_size = performance_config.get("batch_write_size", 200)
         
-        # 创建 BELONGS_TO_THEME 关系
-        for concept_id in theme.concept_ids:
-            relation_query = """
-            MATCH (c:Concept {name: $concept_id})
-            MATCH (t:Theme {id: $theme_id})
+        for i in range(0, len(themes), batch_size):
+            batch = themes[i:i + batch_size]
+            
+            # 使用 UNWIND 批量写入
+            query = """
+            UNWIND $themes AS theme
+            MERGE (t:Theme {id: theme.id})
+            SET t.label = theme.label,
+                t.summary = theme.summary,
+                t.level = theme.level,
+                t.keywords = theme.keywords,
+                t.community_id = theme.community_id,
+                t.member_count = theme.member_count,
+                t.concept_ids = theme.concept_ids,
+                t.claim_ids = theme.claim_ids,
+                t.key_evidence = theme.key_evidence,
+                t.build_version = theme.build_version,
+                t.updated_at = datetime()
+            ON CREATE SET
+                t.created_at = datetime()
+            """
+            
+            themes_data = []
+            for theme in batch:
+                themes_data.append({
+                    "id": theme.id,
+                    "label": theme.label,
+                    "summary": theme.summary,
+                    "level": theme.level,
+                    "keywords": theme.keywords,
+                    "community_id": theme.community_id,
+                    "member_count": theme.member_count,
+                    "concept_ids": theme.concept_ids,
+                    "claim_ids": theme.claim_ids,
+                    "key_evidence": json.dumps(theme.key_evidence) if theme.key_evidence else None,
+                    "build_version": theme.build_version
+                })
+            
+            neo4j_client.execute_query(query, {"themes": themes_data})
+        
+        # 2. 批量创建 BELONGS_TO_THEME 关系
+        # 收集所有关系
+        concept_relations = []  # [(concept_id, theme_id), ...]
+        claim_relations = []    # [(claim_id, theme_id), ...]
+        
+        for theme in themes:
+            for concept_id in theme.concept_ids:
+                concept_relations.append((concept_id, theme.id))
+            for claim_id in theme.claim_ids:
+                claim_relations.append((claim_id, theme.id))
+        
+        # 批量创建概念关系
+        if concept_relations:
+            query = """
+            UNWIND $relations AS rel
+            MATCH (c:Concept {name: rel.concept_id})
+            MATCH (t:Theme {id: rel.theme_id})
             MERGE (c)-[:BELONGS_TO_THEME]->(t)
             """
-            neo4j_client.execute_query(relation_query, {
-                "concept_id": concept_id,
-                "theme_id": theme.id
-            })
+            relations_data = [
+                {"concept_id": cid, "theme_id": tid}
+                for cid, tid in concept_relations
+            ]
+            neo4j_client.execute_query(query, {"relations": relations_data})
         
-        for claim_id in theme.claim_ids:
-            relation_query = """
-            MATCH (cl:Claim {id: $claim_id})
-            MATCH (t:Theme {id: $theme_id})
+        # 批量创建论断关系
+        if claim_relations:
+            query = """
+            UNWIND $relations AS rel
+            MATCH (cl:Claim {id: rel.claim_id})
+            MATCH (t:Theme {id: rel.theme_id})
             MERGE (cl)-[:BELONGS_TO_THEME]->(t)
             """
-            neo4j_client.execute_query(relation_query, {
-                "claim_id": claim_id,
-                "theme_id": theme.id
-            })
+            relations_data = [
+                {"claim_id": cid, "theme_id": tid}
+                for cid, tid in claim_relations
+            ]
+            neo4j_client.execute_query(query, {"relations": relations_data})
+        
+        logger.debug(f"批量存储主题完成: {len(themes)} 个主题")
+    
+    def _store_theme(self, theme: Theme):
+        """存储单个主题到 Neo4j（兼容旧代码）"""
+        self._batch_store_themes([theme])
     
     def _generate_theme_id(self, community_id: str, doc_id: str, level: int = 1) -> str:
         """生成主题 ID"""
