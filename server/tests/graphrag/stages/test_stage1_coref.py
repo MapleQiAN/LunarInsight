@@ -403,41 +403,30 @@ def test_coref_complex_scenario():
     print(f"\n✓ 测试通过: 复杂场景处理正常")
 
 
-def test_coref_llm_mode(monkeypatch):
+def test_coref_llm_mode():
     """
     测试 LLM 模式指代消解
     
-    使用 mock 模式进行测试（不需要真实 API key）
-    可以通过环境变量或 monkeypatch 配置真实 LLM
+    使用系统前端设置的 LLM 参数（从 config_service 读取）
+    如果未配置 LLM，将自动回退到规则方法
     """
     print("\n" + "="*80)
     print("测试: LLM 模式指代消解")
     print("="*80)
+    print("注意: 此测试使用系统前端设置的 LLM 配置")
+    print("如果未配置或配置无效，将自动回退到规则方法")
+    print("="*80)
     
-    # 方式 1: 使用 monkeypatch 模拟 config_service（推荐用于测试）
-    class _MockConfigService:
-        @staticmethod
-        def get_ai_provider_config():
-            # 使用 mock 模式（不需要真实 API）
-            return {
-                "provider": "ollama",
-                "api_key": "mock",
-                "model": "qwen3:8b",
-                "base_url": "http://localhost:11434"
-            }
+    # 从系统配置读取 LLM 参数
+    from services.config_service import config_service
+    ai_config = config_service.get_ai_provider_config()
     
-    # 方式 2: 如果要测试真实 LLM，可以设置环境变量或修改上面的配置：
-    # return {
-    #     "provider": "openai",  # 或 "deepseek", "qwen", "ollama" 等
-    #     "api_key": "your-api-key",
-    #     "model": "gpt-4o-mini",
-    #     "base_url": ""  # 可选，使用默认值
-    # }
+    print(f"\n系统 LLM 配置:")
+    print(f"  Provider: {ai_config['provider']}")
+    print(f"  Model: {ai_config['model']}")
+    print(f"  Base URL: {ai_config['base_url']}")
     
-    from graphrag.stages import stage1_coref as s1
-    monkeypatch.setattr(s1, "config_service", _MockConfigService, raising=True)
-    
-    # 重新创建 resolver（会使用新的 config_service）
+    # 创建 resolver（会使用系统配置的 config_service）
     resolver = CoreferenceResolver()
     
     # 检查 LLM 是否启用
@@ -655,27 +644,26 @@ def test_coref_custom_text_non_llm():
     print(f"{'='*60}")
 
 
-def test_coref_custom_text_llm(monkeypatch):
+def test_coref_custom_text_llm():
     """
     自定义文字测试区 - LLM 模式
     
     使用方法:
     1. 修改下面的 CUSTOM_TEXT 变量，填入你想要测试的文字
-    2. 配置 LLM 参数（在下面的 LLM_CONFIG 区域）:
-       - provider: AI 提供商（如: openai, deepseek, ollama, qwen 等）
-       - api_key: API 密钥（Ollama 可以设为 None 或 "mock"）
-       - model: 模型名称
-       - base_url: API 基础 URL（可选，Ollama 需要）
+    2. 确保系统前端已配置 LLM 参数（通过 /settings 接口）
     3. 运行测试:
        pytest tests/graphrag/stages/test_stage1_coref.py::test_coref_custom_text_llm -v -s
     
     注意:
+    - 此测试使用系统前端设置的 LLM 配置（从 config_service 读取）
+    - 如果未配置或配置无效，会自动回退到规则方法
     - 如果使用 Ollama，确保本地已启动 Ollama 服务
     - 如果使用其他提供商，需要有效的 API key
-    - 如果配置错误或 LLM 不可用，会自动回退到规则方法
     """
     print("\n" + "="*80)
     print("自定义文字测试区 - LLM 模式")
+    print("="*80)
+    print("注意: 此测试使用系统前端设置的 LLM 配置")
     print("="*80)
     
     # ============================================================
@@ -688,42 +676,9 @@ def test_coref_custom_text_llm(monkeypatch):
     """
     # ============================================================
     
-    # ============================================================
-    # LLM 配置区域 - 在这里配置你的 LLM 参数
-    # ============================================================
-    LLM_CONFIG = {
-        "provider": "ollama",           # AI 提供商: openai, deepseek, ollama, qwen, etc.
-        "api_key": None,                # API 密钥（Ollama 可以设为 None）
-        "model": "qwen3:4b",          # 模型名称
-        "base_url": "http://localhost:11434"  # API 基础 URL（Ollama 需要）
-    }
-    
-    # 示例配置（取消注释以使用）:
-    # 
-    # OpenAI:
-    # LLM_CONFIG = {
-    #     "provider": "openai",
-    #     "api_key": "sk-your-api-key-here",
-    #     "model": "gpt-4o-mini",
-    #     "base_url": None  # 使用默认值
-    # }
-    # 
-    # DeepSeek:
-    # LLM_CONFIG = {
-    #     "provider": "deepseek",
-    #     "api_key": "sk-your-api-key-here",
-    #     "model": "deepseek-chat",
-    #     "base_url": None
-    # }
-    # 
-    # Ollama (本地):
-    # LLM_CONFIG = {
-    #     "provider": "ollama",
-    #     "api_key": None,
-    #     "model": "llama3",
-    #     "base_url": "http://localhost:11434"
-    # }
-    # ============================================================
+    # 从系统配置读取 LLM 参数
+    from services.config_service import config_service
+    ai_config = config_service.get_ai_provider_config()
     
     # 清理文本（去除首尾空白，合并多行）
     custom_text = CUSTOM_TEXT.strip().replace('\n', ' ').replace('  ', ' ')
@@ -732,37 +687,25 @@ def test_coref_custom_text_llm(monkeypatch):
         print("\n⚠ 警告: 自定义文本为空，请修改 CUSTOM_TEXT 变量")
         return
     
-    # 配置 LLM（使用 monkeypatch 覆盖 config_service）
-    class _MockConfigService:
-        @staticmethod
-        def get_ai_provider_config():
-            return {
-                "provider": LLM_CONFIG["provider"],
-                "api_key": LLM_CONFIG["api_key"],
-                "model": LLM_CONFIG["model"],
-                "base_url": LLM_CONFIG["base_url"]
-            }
-    
-    from graphrag.stages import stage1_coref as s1
-    monkeypatch.setattr(s1, "config_service", _MockConfigService, raising=True)
-    
-    # 创建 resolver（会使用上面配置的 LLM）
+    # 创建 resolver（会使用系统配置的 config_service）
     resolver = CoreferenceResolver()
     
     # 检查 LLM 是否启用
-    print(f"\nLLM 配置:")
-    print(f"  Provider: {LLM_CONFIG['provider']}")
-    print(f"  Model: {LLM_CONFIG['model']}")
-    print(f"  Base URL: {LLM_CONFIG['base_url']}")
+    print(f"\n系统 LLM 配置:")
+    print(f"  Provider: {ai_config['provider']}")
+    print(f"  Model: {ai_config['model']}")
+    print(f"  Base URL: {ai_config['base_url']}")
     print(f"LLM 状态: {'✓ 已启用' if resolver.llm_enabled else '✗ 未启用'}")
     
     if not resolver.llm_enabled:
         print("\n⚠ 警告: LLM 未启用，将回退到非 LLM 模式（规则方法）")
         print("可能的原因:")
-        print("  1. API key 未配置或无效")
-        print("  2. Base URL 不正确（Ollama 需要）")
-        print("  3. 模型名称不存在")
-        print("  4. 网络连接问题")
+        print("  1. 系统前端未配置 LLM 参数")
+        print("  2. API key 未配置或无效")
+        print("  3. Base URL 不正确（Ollama 需要）")
+        print("  4. 模型名称不存在")
+        print("  5. 网络连接问题")
+        print("\n提示: 请通过前端设置页面（/settings）配置 LLM 参数")
     elif resolver.llm_client:
         print(f"  LLM Client: {resolver.llm_client.model}")
     
