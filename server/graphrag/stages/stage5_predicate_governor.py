@@ -5,8 +5,8 @@
 """
 
 import logging
-from typing import Dict, Any, Optional
-from server.graphrag.config import get_config, ConstraintResult, GovernanceStatus
+from typing import Dict, Any, Optional, List
+from graphrag.config import get_config, ConstraintResult, GovernanceStatus
 
 logger = logging.getLogger("graphrag.stage5")
 
@@ -329,7 +329,7 @@ class PredicateGovernor:
         Returns:
             待复核关系列表
         """
-        from server.infra.neo4j_client import neo4j_client
+        from infra.neo4j_client import neo4j_client
         
         query = """
         MATCH ()-[r]->()
