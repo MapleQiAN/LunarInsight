@@ -143,7 +143,10 @@ class CoreferenceResolver:
         """
         消解 Chunk 中的指代关系
         
-        优先使用 LLM 模式，如果 LLM 不可用或失败，则回退到规则方法
+        策略：
+        1. 先使用规则方法快速评估
+        2. 如果规则方法覆盖率低（< 0.3）且 LLM 可用，则尝试 LLM 模式
+        3. 否则返回规则方法的结果
         
         Args:
             chunk: 输入 Chunk
@@ -158,22 +161,26 @@ class CoreferenceResolver:
         
         text = chunk.text
         
-        # 优先尝试使用 LLM 模式
-        if self.llm_enabled and self.llm_client:
-            try:
-                logger.info(f"[Stage1] 尝试使用 LLM 模式进行指代消解")
-                result = self._resolve_with_llm(chunk)
-                if result:
-                    logger.info(f"[Stage1] LLM 模式成功完成指代消解")
-                    return result
-                else:
-                    logger.warning(f"[Stage1] LLM 模式返回空结果，回退到规则方法")
-            except Exception as e:
-                logger.warning(f"[Stage1] LLM 模式失败，回退到规则方法: {e}")
+        # 1. 先使用规则方法快速评估
+        logger.info(f"[Stage1] 使用规则方法进行初步评估")
+        rules_result = self._resolve_with_rules(chunk)
         
-        # 回退到规则方法
-        logger.info(f"[Stage1] 使用规则方法进行指代消解")
-        return self._resolve_with_rules(chunk)
+        # 2. 如果规则方法覆盖率低且 LLM 可用，尝试 LLM 模式
+        if self.llm_enabled and self.llm_client and rules_result.coverage < 0.3:
+            logger.info(f"[Stage1] 规则方法覆盖率较低 ({rules_result.coverage:.2%})，尝试 LLM 模式")
+            try:
+                llm_result = self._resolve_with_llm(chunk)
+                if llm_result and llm_result.coverage > rules_result.coverage:
+                    logger.info(f"[Stage1] LLM 模式覆盖率更高 ({llm_result.coverage:.2%})，使用 LLM 结果")
+                    return llm_result
+                else:
+                    logger.info(f"[Stage1] LLM 模式覆盖率未改善，使用规则方法结果")
+            except Exception as e:
+                logger.warning(f"[Stage1] LLM 模式失败，继续使用规则方法: {e}")
+        
+        # 3. 返回规则方法的结果
+        logger.info(f"[Stage1] 使用规则方法的结果")
+        return rules_result
     
     def _resolve_with_rules(self, chunk: ChunkMetadata) -> CorefResult:
         """
@@ -455,6 +462,19 @@ class CoreferenceResolver:
         antecedents = []
         sentences = self._split_sentences(text)
         
+        # 停用词列表（更完整）
+        stopwords = {
+            '这个', '那个', '这些', '那些', '它们', '他们', '她们',
+            '什么', '哪个', '哪些', '如何', '为什么', '怎样',
+            '一个', '两个', '三个', '很多', '所有', '没有',
+            '可以', '应该', '需要', '想要', '能够', '开始',
+            '继续', '完成', '结束', '发生', '出现', '存在',
+            '是的', '不是', '对的', '错的', '好的', '坏的',
+            '大的', '小的', '长的', '短的', '高的', '低的',
+            '新的', '旧的', '多的', '少的', '快的', '慢的',
+            '真的', '假的', '强的', '弱的', '美的', '丑的'
+        }
+        
         # 提取可能的实体（大写开头、中文名词短语）
         for sent_idx, sentence in enumerate(sentences):
             sent_start = text.find(sentence)
@@ -472,746 +492,34 @@ class CoreferenceResolver:
                     span=(pos, pos + len(match.group(1)))
                 ))
             
-            # 中文名词短语（2-6 字）
+            # 中文名词短语（2-6 字）- 更精准的提取
+            # 优先提取括号内的全称（如"人工智能"）
             pattern_zh = r'([\u4e00-\u9fff]{2,6})'
             for match in re.finditer(pattern_zh, sentence):
                 pos = sent_start + match.start()
-                # 过滤常见停用词
                 word = match.group(1)
-                if word not in ['这个', '那个', '这些', '那些', '它们', '他们']:
-                    antecedents.append(Antecedent(
-                        text=word,
-                        position=pos,
-                        sentence_idx=sent_idx,
-                        span=(pos, pos + len(word))
-                    ))
-        
-        return antecedents
-    
-    def _match_and_score(
-        self,
-        mentions: List[Mention],
-        antecedents: List[Antecedent],
-        parenthesis_aliases: Dict[str, str]
-    ) -> List[Match]:
-        """匹配打分"""
-        matches = []
-        
-        for mention in mentions:
-            # 获取候选先行词（在语境窗口内）
-            candidates = self._get_candidates(mention, antecedents)
-            
-            if not candidates:
-                logger.debug(f"[Stage1] 提及 '{mention.text}' 无候选先行词")
-                continue
-            
-            logger.debug(f"[Stage1] 提及 '{mention.text}' 有 {len(candidates)} 个候选先行词")
-            
-            # 为每个候选打分
-            scored_candidates = []
-            for candidate in candidates:
-                score = self._score_match(mention, candidate, parenthesis_aliases)
-                scored_candidates.append((candidate, score))
-                logger.debug(f"    候选 '{candidate.text}': 分数={score:.3f}")
-            
-            # 排序，取 Top-K
-            scored_candidates.sort(key=lambda x: x[1], reverse=True)
-            top_candidates = scored_candidates[:self.max_candidates]
-            
-            # 检查多解风险（前三名分差过小）
-            is_multi_solution = False
-            if len(top_candidates) >= 3:
-                scores = [s for _, s in top_candidates[:3]]
-                if scores[0] - scores[2] < 0.1:  # 分差小于 0.1
-                    is_multi_solution = True
-                    logger.debug(f"    多解风险: 前三名分差={scores[0] - scores[2]:.3f} < 0.1")
-            
-            # 生成匹配（只取通过阈值的）
-            min_score = 0.3  # 最低分数阈值
-            valid_matches = []
-            for candidate, score in top_candidates:
-                if score >= min_score:
-                    sentence_distance = abs(mention.sentence_idx - candidate.sentence_idx)
-                    match = Match(
-                        mention=mention,
-                        antecedent=candidate,
-                        score=score,
-                        confidence=min(score, 1.0),
-                        evidence_type=self._get_evidence_type(mention, candidate, parenthesis_aliases),
-                        sentence_distance=sentence_distance,
-                        is_conflict=is_multi_solution
-                    )
-                    matches.append(match)
-                    valid_matches.append((candidate.text, score))
-                else:
-                    logger.debug(f"    候选 '{candidate.text}' 分数 {score:.3f} < 阈值 {min_score}，跳过")
-            
-            if valid_matches:
-                logger.debug(f"    有效匹配: {valid_matches}")
-        
-        return matches
-    
-    def _get_candidates(self, mention: Mention, antecedents: List[Antecedent]) -> List[Antecedent]:
-        """获取候选先行词（在语境窗口内，且在提及之前）"""
-        candidates = []
-        
-        # 指示词"该/此/其"只允许回指最近一句
-        is_demonstrative_near = (
-            mention.type == MentionType.DEMONSTRATIVE and 
-            mention.text in ['该', '此', '其']
-        )
-        max_distance = 1 if is_demonstrative_near else self.context_window
-        
-        for ant in antecedents:
-            # 必须在提及之前
-            if ant.position >= mention.position:
-                continue
-            
-            # 必须在语境窗口内（指示词特殊约束）
-            sentence_distance = mention.sentence_idx - ant.sentence_idx
-            if sentence_distance > max_distance:
-                continue
-            
-            # 跨类回指禁止：检查类型兼容性
-            if not self._is_type_compatible(mention, ant):
-                continue
-            
-            candidates.append(ant)
-        
-        return candidates
-    
-    def _score_match(
-        self,
-        mention: Mention,
-        antecedent: Antecedent,
-        parenthesis_aliases: Dict[str, str]
-    ) -> float:
-        """匹配打分"""
-        score = 0.0
-        
-        # 1. 句距衰减（越近越高）
-        sentence_distance = abs(mention.sentence_idx - antecedent.sentence_idx)
-        distance_score = max(0, 1.0 - sentence_distance * 0.2)
-        weight = self.scoring_weights.get("distance_decay", 0.4)
-        score += distance_score * weight
-        
-        # 跨段长距离惩罚（超过窗口上限时大幅降分）
-        if sentence_distance > self.context_window:
-            # 跨段长距离：统一降级，降低置信度
-            penalty = 0.5  # 大幅降分
-            score *= (1.0 - penalty)
-        
-        # 2. 括号简称强约束（最高优先级）
-        if mention.text in parenthesis_aliases:
-            canonical = parenthesis_aliases[mention.text]
-            if antecedent.text == canonical:
-                boost = self.scoring_weights.get("parenthesis_boost", 0.8)
-                score += boost
-        
-        # 3. 类型一致性（简化版：基于文本特征）
-        type_score = self._check_type_consistency(mention, antecedent)
-        weight = self.scoring_weights.get("type_consistency", 0.2)
-        score += type_score * weight
-        
-        # 4. 语义相似度（可选，当前简化）
-        # 如果有向量模型，可以计算余弦相似度
-        semantic_weight = self.scoring_weights.get("semantic_similarity", 0.0)
-        if semantic_weight > 0:
-            semantic_score = self._compute_semantic_similarity(mention, antecedent)
-            score += semantic_score * semantic_weight
-        
-        # 5. 句法一致性（可选，当前简化）
-        # 需要句法解析，当前跳过
-        syntactic_weight = self.scoring_weights.get("syntactic_consistency", 0.0)
-        if syntactic_weight > 0:
-            syntactic_score = self._compute_syntactic_consistency(mention, antecedent)
-            score += syntactic_score * syntactic_weight
-        
-        # 6. 语言匹配（英文代词在中英混排时优先匹配英文实体）
-        lang_score = self._check_language_match(mention, antecedent)
-        score += lang_score * 0.1  # 小权重
-        
-        # 7. 并列结构处理（"前者/后者"）
-        if mention.text in ['前者', '后者']:
-            parallel_score = self._check_parallel_structure(mention, antecedent)
-            score += parallel_score * 0.3
-        
-        return min(score, 1.0)
-    
-    def _is_type_compatible(self, mention: Mention, antecedent: Antecedent) -> bool:
-        """
-        检查类型兼容性（跨类回指禁止）
-        
-        规则：
-        - Person 不可回指 ORG
-        - 时间词不可回技术概念
-        - 机构名不可回人名
-        """
-        ant_text = antecedent.text
-        ant_type = antecedent.entity_type
-        
-        # 如果有 NER 类型，严格检查
-        if ant_type:
-            if ant_type == "PERSON" and mention.text in ['它', '它们', 'it', 'they']:
-                # 代词"它"不能回指人名
-                return False
-            if ant_type == "ORG" and mention.text in ['他', '她', '他们', '她们', 'he', 'she', 'they']:
-                # 人称代词不能回指机构
-                return False
-            if ant_type == "TIME" and mention.text in ['它', '它们', 'it', 'they']:
-                # 时间词不能回指技术概念（简化：通过文本特征判断）
-                if re.search(r'(技术|算法|模型|系统|框架)', ant_text):
-                    return False
-        
-        # 基于文本特征的启发式规则
-        # 中文人名（2-4字，常见姓氏）
-        if re.match(r'^[王李张刘陈杨黄赵吴周徐孙马朱胡郭何高林罗郑梁谢宋唐许韩冯邓曹彭曾肖田董袁潘于蒋蔡余杜叶程苏魏吕丁任沈姚卢姜崔钟谭陆汪范金石廖贾夏韦付方白邹孟熊秦邱江尹薛闫段雷侯龙史陶黎贺顾毛郝龚邵万钱严覃武戴莫孔向汤]', ant_text):
-            if mention.text in ['它', '它们', 'it', 'they']:
-                return False  # 人名不能用"它"回指
-        
-        # 机构名特征（包含"公司"、"集团"、"大学"等）
-        if re.search(r'(公司|集团|大学|学院|机构|组织|部门|中心)', ant_text):
-            if mention.text in ['他', '她', '他们', '她们', 'he', 'she', 'they']:
-                return False  # 机构不能用"他/她"回指
-        
-        # 时间词特征
-        if re.search(r'(\d{4}年|\d{1,2}月|昨天|今天|明天|去年|今年|明年)', ant_text):
-            if mention.text in ['它', '它们', 'it', 'they']:
-                # 时间词不能回指技术概念（简化判断）
-                return True  # 时间词本身可以作为先行词，但需要进一步检查
-        
-        return True
-    
-    def _check_type_consistency(self, mention: Mention, antecedent: Antecedent) -> float:
-        """检查类型一致性（用于打分）"""
-        # 如果类型不兼容，直接返回 0
-        if not self._is_type_compatible(mention, antecedent):
-            return 0.0
-        
-        # 如果提及是代词，检查先行词是否是人名/机构名
-        if mention.type == MentionType.PRONOUN:
-            # 中文人名通常 2-4 字
-            if re.match(r'^[\u4e00-\u9fff]{2,4}$', antecedent.text):
-                return 0.8
-            # 英文专有名词
-            if re.match(r'^[A-Z][a-z]+$', antecedent.text):
-                return 0.8
-        
-        return 0.5  # 默认中等一致性
-    
-    def _get_evidence_type(
-        self,
-        mention: Mention,
-        antecedent: Antecedent,
-        parenthesis_aliases: Dict[str, str]
-    ) -> str:
-        """获取证据类型"""
-        if mention.text in parenthesis_aliases:
-            return "parenthesis"
-        
-        # 检查是否是简称映射
-        if mention.text in ["模型", "算法", "方法", "技术", "系统", "框架", "架构"]:
-            return "abbreviation"
-        
-        sentence_distance = abs(mention.sentence_idx - antecedent.sentence_idx)
-        
-        # 跨段长距离标记
-        if sentence_distance > self.context_window:
-            return "cross_segment_long_distance"
-        
-        if sentence_distance == 0:
-            return "same_sentence"
-        elif sentence_distance <= 2:
-            return "near_distance"
-        else:
-            return "far_distance"
-    
-    def _validate_consistency(
-        self,
-        matches: List[Match],
-        parenthesis_aliases: Dict[str, str]
-    ) -> List[Match]:
-        """一致性校验"""
-        validated = []
-        alias_conflicts = 0
-        
-        # 1. 别名一致性：括号别名必须一致
-        alias_map = {}  # {mention_text: canonical}
-        for match in matches:
-            if match.mention.text in parenthesis_aliases:
-                canonical = parenthesis_aliases[match.mention.text]
-                if match.mention.text not in alias_map:
-                    alias_map[match.mention.text] = canonical
-                    logger.debug(f"[Stage1] 别名一致性: '{match.mention.text}' → '{canonical}'")
-                elif alias_map[match.mention.text] != canonical:
-                    # 冲突：跳过此匹配
-                    match.is_conflict = True
-                    alias_conflicts += 1
-                    logger.debug(f"[Stage1] 别名冲突: '{match.mention.text}' 已映射到 '{alias_map[match.mention.text]}', "
-                               f"但匹配到 '{canonical}', 标记为冲突")
+                
+                # 过滤停用词
+                if word in stopwords:
                     continue
-            
-            validated.append(match)
-        
-        if alias_conflicts > 0:
-            logger.debug(f"[Stage1] 别名一致性校验: 发现 {alias_conflicts} 个冲突")
-        
-        # 2. 窗口内一致性（简化版：同一提及在同一窗口应指向同一先行词）
-        # 按提及文本分组
-        mention_groups: Dict[str, List[Match]] = {}
-        for match in validated:
-            key = match.mention.text
-            if key not in mention_groups:
-                mention_groups[key] = []
-            mention_groups[key].append(match)
-        
-        # 检查每组内的冲突
-        final_validated = []
-        window_conflicts = 0
-        for key, group in mention_groups.items():
-            if len(group) == 1:
-                final_validated.append(group[0])
-            else:
-                # 多个匹配：选择分数最高的，其他标记为冲突
-                group.sort(key=lambda m: m.score, reverse=True)
-                best_match = group[0]
-                final_validated.append(best_match)
-                logger.debug(f"[Stage1] 窗口一致性: 提及 '{key}' 有 {len(group)} 个匹配, "
-                           f"选择最高分 '{best_match.antecedent.text}' (分数={best_match.score:.3f})")
-                # 其他标记为冲突（但不丢弃，用于计算冲突率）
-                for m in group[1:]:
-                    m.is_conflict = True
-                    window_conflicts += 1
-                    final_validated.append(m)
-                    logger.debug(f"[Stage1]  标记冲突: '{m.antecedent.text}' (分数={m.score:.3f})")
-        
-        if window_conflicts > 0:
-            logger.debug(f"[Stage1] 窗口一致性校验: 发现 {window_conflicts} 个冲突")
-        
-        return final_validated
-    
-    def _compute_quality_metrics(
-        self,
-        mentions: List[Mention],
-        matches: List[Match]
-    ) -> Tuple[float, float, Dict[str, Any]]:
-        """计算质量指标"""
-        total_mentions = len(mentions)
-        if total_mentions == 0:
-            return 0.0, 0.0, {}
-        
-        # 覆盖率：已消解的提及数 / 总提及数
-        resolved_mentions = set()
-        for match in matches:
-            if not match.is_conflict:
-                resolved_mentions.add(match.mention.text)
-        
-        coverage = len(resolved_mentions) / total_mentions if total_mentions > 0 else 0.0
-        
-        # 冲突率：冲突匹配数 / 总匹配数
-        conflict_matches = sum(1 for m in matches if m.is_conflict)
-        conflict = conflict_matches / len(matches) if matches else 0.0
-        
-        # 分桶统计
-        pronoun_mentions = [m for m in mentions if m.type == MentionType.PRONOUN]
-        abbrev_mentions = [m for m in mentions if m.type == MentionType.ABBREVIATION]
-        
-        pronoun_resolved = sum(1 for m in pronoun_mentions if m.text in resolved_mentions)
-        abbrev_resolved = sum(1 for m in abbrev_mentions if m.text in resolved_mentions)
-        
-        pronoun_coverage = pronoun_resolved / len(pronoun_mentions) if pronoun_mentions else 0.0
-        abbrev_coverage = abbrev_resolved / len(abbrev_mentions) if abbrev_mentions else 0.0
-        
-        metrics = {
-            "pronoun_coverage": pronoun_coverage,
-            "abbrev_coverage": abbrev_coverage,
-            "total_mentions": total_mentions,
-            "resolved_mentions": len(resolved_mentions),
-            "total_matches": len(matches),
-            "conflict_matches": conflict_matches
-        }
-        
-        return coverage, conflict, metrics
-    
-    def _resolve_with_llm(self, chunk: ChunkMetadata) -> Optional[CorefResult]:
-        """
-        使用 LLM 进行指代消解
-        
-        Args:
-            chunk: 输入 Chunk
-        
-        Returns:
-            CorefResult 或 None（如果失败）
-        """
-        if not self.llm_client:
-            return None
-        
-        text = chunk.text
-        
-        # 0. 噪声过滤（复用规则方法的逻辑）
-        if self._should_skip(text):
-            logger.debug(f"[Stage1-LLM] 跳过噪声文本: chunk_id={chunk.id}")
-            return CorefResult(
-                resolved_text=None,
-                alias_map={},
-                mode="skip",
-                coverage=0.0,
-                conflict=0.0,
-                metrics={},
-                provenance=[]
-            )
-        
-        # 1. 检测提及和候选先行词（复用规则方法）
-        mentions = self._detect_mentions(text)
-        if not mentions:
-            logger.info(f"[Stage1-LLM] 未检测到提及，跳过消解")
-            return CorefResult(
-                resolved_text=text,
-                alias_map={},
-                mode="skip",
-                coverage=0.0,
-                conflict=0.0,
-                metrics={},
-                provenance=[]
-            )
-        
-        # 2. 提取括号别名（强约束）
-        parenthesis_aliases = self._extract_parenthesis_aliases(text)
-        
-        # 3. 生成候选先行词
-        antecedents = self._generate_antecedents(text, mentions)
-        
-        # 调试：打印候选先行词
-        logger.debug(f"[Stage1-LLM] 生成的候选先行词: {[ant.text for ant in antecedents]}")
-        
-        # 4. 构造 LLM prompt
-        prompt = self._build_llm_prompt(text, mentions, antecedents, parenthesis_aliases)
-        
-        try:
-            # 5. 调用 LLM
-            messages = [
-                {"role": "system", "content": "你是一个专业的中文指代消解助手。请根据给定的文本、提及和候选先行词，为每个提及选择最合理的先行词。"},
-                {"role": "user", "content": prompt}
-            ]
-            
-            # 调用 LLM（使用 json_mode 参数）
-            response = self.llm_client.chat_completion(
-                messages=messages,
-                temperature=0.3,
-                json_mode=True
-            )
-            
-            logger.debug(f"[Stage1-LLM] LLM原始响应: {response[:300]}...")
-            
-            # 如果响应为空，返回 None
-            if not response or not response.strip():
-                logger.warning(f"[Stage1-LLM] LLM 返回空响应")
-                return None
-            
-            # 6. 解析 LLM 响应（尝试提取 JSON 部分）
-            llm_result = self._parse_llm_json_response(response)
-            if not llm_result:
-                logger.warning(f"[Stage1-LLM] LLM结果解析失败，返回None")
-                return None
-            
-            logger.debug(f"[Stage1-LLM] LLM结果解析成功: {type(llm_result)}")
-            
-            # 7. 转换为 CorefResult
-            return self._parse_llm_result(text, mentions, antecedents, parenthesis_aliases, llm_result)
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"[Stage1-LLM] JSON 解析失败: {e}")
-            logger.debug(f"[Stage1-LLM] 原始响应: {response[:500] if 'response' in locals() else 'N/A'}")
-            return None
-        except Exception as e:
-            logger.error(f"[Stage1-LLM] LLM 调用失败: {e}")
-            return None
-    
-    def _parse_llm_json_response(self, response: str) -> Optional[Dict[str, Any]]:
-        """
-        解析 LLM 返回的 JSON 响应
-        
-        处理可能包含非 JSON 文本的情况（如 markdown 代码块）
-        """
-        logger.debug(f"[Stage1-LLM] 尝试解析JSON响应: {response[:200]}...")
-        
-        try:
-            # 直接尝试解析
-            result = json.loads(response)
-            logger.debug(f"[Stage1-LLM] 直接JSON解析成功")
-            return result
-        except json.JSONDecodeError as e:
-            logger.debug(f"[Stage1-LLM] 直接JSON解析失败: {e}")
-            # 尝试提取 JSON 代码块
-            import re
-            # 匹配 ```json ... ``` 或 ``` ... ```
-            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
-            if json_match:
-                logger.debug(f"[Stage1-LLM] 找到JSON代码块")
-                try:
-                    result = json.loads(json_match.group(1))
-                    logger.debug(f"[Stage1-LLM] 代码块JSON解析成功")
-                    return result
-                except json.JSONDecodeError as e:
-                    logger.debug(f"[Stage1-LLM] 代码块JSON解析失败: {e}")
-                    pass
-            
-            # 尝试提取第一个 { ... } 块
-            brace_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if brace_match:
-                logger.debug(f"[Stage1-LLM] 找到大括号块")
-                try:
-                    result = json.loads(brace_match.group(0))
-                    logger.debug(f"[Stage1-LLM] 大括号块JSON解析成功")
-                    return result
-                except json.JSONDecodeError as e:
-                    logger.debug(f"[Stage1-LLM] 大括号块JSON解析失败: {e}")
-                    pass
-            
-            logger.error(f"[Stage1-LLM] 无法解析 JSON 响应: {response[:500]}")
-            return None
-    
-    def _build_llm_prompt(
-        self,
-        text: str,
-        mentions: List[Mention],
-        antecedents: List[Antecedent],
-        parenthesis_aliases: Dict[str, str]
-    ) -> str:
-        """构造 LLM prompt"""
-        # 格式化提及列表
-        mentions_list = []
-        for i, m in enumerate(mentions, 1):
-            mentions_list.append({
-                "id": i,
-                "text": m.text,
-                "type": m.type.value,
-                "position": m.position
-            })
-        
-        # 构造 prompt - 让LLM自行理解整段文字
-        prompt = f"""请对以下中文文本进行指代消解。
-
-文本内容：
-{text}
-
-检测到的提及（需要消解的指代词）：
-{json.dumps(mentions_list, ensure_ascii=False, indent=2)}
-
-括号别名映射（强约束，必须遵守）：
-{json.dumps(parenthesis_aliases, ensure_ascii=False, indent=2)}
-
-请为每个提及选择最合理的先行词。要求：
-1. 先行词必须在原文中存在，且在提及之前出现
-2. 必须遵守括号别名映射（如果提及是括号别名，必须映射到对应的全称）
-3. 如果无法确定，可以返回 null
-4. 考虑语义一致性、句法一致性、距离等因素
-5. 请仔细阅读整段文字，理解上下文关系后进行判断
-
-请以 JSON 格式返回结果，格式如下：
-{{
-  "resolutions": [
-    {{
-      "mention_id": 1,
-      "mention_text": "它",
-      "antecedent_text": "人工智能",
-      "confidence": 0.9,
-      "rationale": "理由说明"
-    }}
-  ],
-  "resolved_text": "消解后的完整文本（可选，如果置信度高）"
-}}
-
-只返回 JSON，不要其他内容。"""
-        
-        return prompt
-    
-    def _parse_llm_result(
-        self,
-        text: str,
-        mentions: List[Mention],
-        antecedents: List[Antecedent],
-        parenthesis_aliases: Dict[str, str],
-        llm_result: Dict[str, Any]
-    ) -> CorefResult:
-        """解析 LLM 返回结果并转换为 CorefResult - 直接信任LLM版本"""
-        alias_map = {}
-        provenance = []
-        resolved_text = None
-        matches = []
-        
-        resolved_mentions = set()
-        
-        # 构建提及字典
-        mention_dict = {i+1: m for i, m in enumerate(mentions)}
-        
-        # 处理两种可能的LLM返回格式
-        resolutions = []
-        
-        # 格式1: 标准格式 - "resolutions" 数组
-        if "resolutions" in llm_result:
-            resolutions = llm_result.get("resolutions", [])
-        
-        # 格式2: 简化格式 - "mentions" 数组
-        elif "mentions" in llm_result:
-            llm_mentions = llm_result.get("mentions", [])
-            global_confidence = llm_result.get("confidence", 0.8)
-            global_rationale = llm_result.get("rationale", "")
-            
-            # 转换为标准格式
-            for i, llm_mention in enumerate(llm_mentions):
-                resolutions.append({
-                    "mention_id": i + 1,
-                    "mention_text": llm_mention.get("text", ""),
-                    "antecedent_text": llm_mention.get("resolution", ""),
-                    "confidence": global_confidence,
-                    "rationale": global_rationale
-                })
-        
-        # 如果还是没有找到有效数据，尝试其他可能的字段
-        else:
-            logger.warning(f"[Stage1-LLM] LLM返回格式不符合预期，原始数据: {llm_result}")
-            # 创建一个空的结果
-            total_mentions = len(mentions)
-            return CorefResult(
-                resolved_text=None,
-                alias_map={},
-                mode="llm",
-                coverage=0.0,
-                conflict=0.0,
-                metrics={
-                    "pronoun_coverage": 0.0,
-                    "abbrev_coverage": 0.0,
-                    "total_mentions": total_mentions,
-                    "resolved_mentions": 0,
-                    "total_matches": 0,
-                    "conflict_matches": 0,
-                    "llm_mode": "direct"
-                },
-                provenance=[],
-                matches=[]
-            )
-        
-        # 处理解析结果
-        for res in resolutions:
-            mention_id = res.get("mention_id")
-            mention_text = res.get("mention_text")
-            antecedent_text = res.get("antecedent_text")
-            confidence = res.get("confidence", 0.5)
-            rationale = res.get("rationale", "")
-            
-            if not mention_id or mention_id not in mention_dict:
-                logger.debug(f"[Stage1-LLM] 跳过无效的mention_id: {mention_id}")
-                continue
-            
-            mention = mention_dict[mention_id]
-            
-            # 调试：打印每个解析结果
-            logger.debug(f"[Stage1-LLM] 处理: {mention_text} -> {antecedent_text}")
-            
-            # 如果LLM返回null，跳过
-            if not antecedent_text or antecedent_text.lower() == 'null':
-                logger.debug(f"[Stage1-LLM] LLM返回null，跳过: {mention_text}")
-                continue
-            
-            # 检查括号别名约束（强约束）
-            if mention_text in parenthesis_aliases:
-                canonical = parenthesis_aliases[mention_text]
-                if antecedent_text != canonical:
-                    logger.warning(f"[Stage1-LLM] 括号别名约束冲突: '{mention_text}' 应映射到 '{canonical}'，但 LLM 返回 '{antecedent_text}'，使用括号别名")
-                    antecedent_text = canonical
-            
-            # 验证先行词是否在原文中存在且位置合理
-            # 在原文中搜索该先行词
-            import re
-            pattern = re.compile(re.escape(antecedent_text))
-            matches_in_text = list(pattern.finditer(text))
-            
-            # 找到在提及之前的所有匹配
-            valid_positions = [m.start() for m in matches_in_text if m.start() < mention.position]
-            
-            if valid_positions:
-                # 使用最接近提及的匹配位置
-                closest_pos = max(valid_positions)
                 
-                # 创建一个虚拟的Antecedent对象
-                from ..models.graph import Antecedent
-                virtual_antecedent = Antecedent(
-                    text=antecedent_text,
-                    position=closest_pos,
-                    entity_type="llm_identified",  # 标记为LLM识别
-                    sentence_idx=self._get_sentence_index_from_position(text, closest_pos)
-                )
+                # 过滤代词和指示词
+                if word in ['它', '他', '她', '它们', '他们', '她们', '其', '该', '此', '这', '那', '前者', '后者']:
+                    continue
                 
-                alias_map[mention_text] = antecedent_text
-                resolved_mentions.add(mention_text)
-                
-                # 创建 Match 对象
-                sentence_distance = abs(mention.sentence_idx - virtual_antecedent.sentence_idx)
-                match = Match(
-                    mention=mention,
-                    antecedent=virtual_antecedent,
-                    score=confidence,
-                    confidence=confidence,
-                    evidence_type="llm_direct",  # 标记为直接LLM结果
-                    sentence_distance=sentence_distance,
-                    is_conflict=False
-                )
-                matches.append(match)
-                
-                provenance.append({
-                    "mention": mention_text,
-                    "canonical": antecedent_text,
-                    "confidence": confidence,
-                    "evidence_type": "llm_direct",
-                    "rationale": f"LLM直接识别: {rationale}",
-                    "sentence_distance": sentence_distance,
-                    "mention_position": mention.position,
-                    "antecedent_position": closest_pos
-                })
-                
-                logger.info(f"[Stage1-LLM] LLM直接识别成功: '{mention_text}' -> '{antecedent_text}' (置信度: {confidence:.2f})")
-            else:
-                logger.warning(f"[Stage1-LLM] LLM返回的先行词 '{antecedent_text}' 在原文中不存在或在提及 '{mention_text}' 之后，跳过")
-        
-        # 添加括号别名
-        alias_map.update(parenthesis_aliases)
-        
-        # 计算质量指标
-        total_mentions = len(mentions)
-        coverage = len(resolved_mentions) / total_mentions if total_mentions > 0 else 0.0
-        conflict = 0.0  # LLM 直接模式下假设无冲突
-        
-        # 分桶统计
-        pronoun_mentions = [m for m in mentions if m.type == MentionType.PRONOUN]
-        abbrev_mentions = [m for m in mentions if m.type == MentionType.ABBREVIATION]
-        
-        pronoun_resolved = sum(1 for m in pronoun_mentions if m.text in resolved_mentions)
-        abbrev_resolved = sum(1 for m in abbrev_mentions if m.text in resolved_mentions)
-        
-        pronoun_coverage = pronoun_resolved / len(pronoun_mentions) if pronoun_mentions else 0.0
-        abbrev_coverage = abbrev_resolved / len(abbrev_mentions) if abbrev_mentions else 0.0
-        
-        metrics = {
-            "pronoun_coverage": pronoun_coverage,
-            "abbrev_coverage": abbrev_coverage,
-            "total_mentions": total_mentions,
-            "resolved_mentions": len(resolved_mentions),
-            "total_matches": len(matches),
-            "conflict_matches": 0,
-            "llm_mode": "direct"
-        }
-        
-        return CorefResult(
-            resolved_text=resolved_text,
-            alias_map=alias_map,
-            mode="llm",
-            coverage=coverage,
-            conflict=conflict,
-            metrics=metrics,
-            provenance=provenance,
-            matches=matches
-        )
+                # 过滤虚词
+                if re.search(r'^(的|了|在|和|或|但|因|所|被|把|给|向|对|跟|同|比|从|到|为|于)$', word):
+                    continue
+
+                antecedents.append(Antecedent(
+                    text=word,
+                    position=pos,
+                    sentence_idx=sent_idx,
+                    span=(pos, pos + len(word))
+                ))
+            
+
+
     
     def _decide_mode(self, coverage: float, conflict: float) -> Literal["rewrite", "local", "alias_only", "skip"]:
         """决策路由"""
