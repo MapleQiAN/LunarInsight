@@ -1052,10 +1052,10 @@ class CoreferenceResolver:
         self.config = get_config()
         self.thresholds = self.config.thresholds.coreference
         
-        # 初始化规则模式解析器
-        self.rule_resolver = RuleBasedResolver(self.thresholds)
+        # # 初始化规则模式解析器（已注释，完全依赖 LLM）
+        # self.rule_resolver = RuleBasedResolver(self.thresholds)
         
-        # 初始化 LLM 模式解析器（如果可用）
+        # 初始化 LLM 模式解析器（必须）
         self.llm_resolver: Optional[LLMResolver] = None
         self.llm_client: Optional[BaseAIClient] = None
         self.llm_enabled = False
@@ -1094,7 +1094,7 @@ class CoreferenceResolver:
         """
         执行指代消解
         
-        优先使用 LLM 模式，失败则回退到规则模式
+        完全依赖 LLM 模式
         
         Args:
             chunk: 输入 Chunk
@@ -1106,26 +1106,30 @@ class CoreferenceResolver:
         logger.info(f"[Stage1] Chunk ID: {chunk.id}")
         logger.info(f"[Stage1] 文本长度: {len(chunk.text)} 字符")
         
-        # 优先尝试 LLM 模式
+        # 完全依赖 LLM 模式
         if self.llm_enabled and self.llm_resolver:
             try:
-                logger.info(f"[Stage1] ========== 尝试 LLM 模式 ==========")
+                logger.info(f"[Stage1] ========== 使用 LLM 模式 ==========")
                 result = self.llm_resolver.resolve(chunk)
                 if result:
                     logger.info(f"[Stage1] ✓ LLM 模式成功完成指代消解，模式={result.mode}")
+                    logger.info(f"[Stage1] ========== 指代消解完成 ==========")
                     return result
                 else:
-                    logger.warning(f"[Stage1] ✗ LLM 模式返回空结果，回退到规则方法")
+                    logger.error(f"[Stage1] ✗ LLM 模式返回空结果")
+                    raise RuntimeError("LLM 模式返回空结果")
             except Exception as e:
-                logger.error(f"[Stage1] ✗ LLM 模式异常，回退到规则方法: {type(e).__name__}: {e}", exc_info=True)
+                logger.error(f"[Stage1] ✗ LLM 模式异常: {type(e).__name__}: {e}", exc_info=True)
+                raise
         else:
-            logger.info(f"[Stage1] LLM 未启用，使用规则方法")
+            logger.error(f"[Stage1] ✗ LLM 未启用，无法执行指代消解")
+            raise RuntimeError("LLM 模式未启用，请配置 LLM 参数")
         
-        # 回退到规则方法
-        logger.info(f"[Stage1] ========== 使用规则方法 ==========")
-        result = self.rule_resolver.resolve(chunk)
-        logger.info(f"[Stage1] ========== 指代消解完成 ==========")
-        return result
+        # # 回退到规则方法（已注释，完全依赖 LLM）
+        # logger.info(f"[Stage1] ========== 使用规则方法 ==========")
+        # result = self.rule_resolver.resolve(chunk)
+        # logger.info(f"[Stage1] ========== 指代消解完成 ==========")
+        # return result
 
 
 __all__ = ["CoreferenceResolver", "CorefResult", "RuleBasedResolver", "LLMResolver"]
