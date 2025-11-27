@@ -161,15 +161,18 @@ class CoreferenceResolver:
         # 优先尝试使用 LLM 模式
         if self.llm_enabled and self.llm_client:
             try:
-                logger.info(f"[Stage1] 尝试使用 LLM 模式进行指代消解")
+                logger.info(f"[Stage1] ========== 尝试 LLM 模式 ==========")
+                logger.info(f"[Stage1] LLM 客户端状态: enabled={self.llm_enabled}, client={self.llm_client is not None}")
                 result = self._resolve_with_llm(chunk)
                 if result:
-                    logger.info(f"[Stage1] LLM 模式成功完成指代消解")
+                    logger.info(f"[Stage1] ✓ LLM 模式成功完成指代消解，模式={result.mode}")
                     return result
                 else:
-                    logger.warning(f"[Stage1] LLM 模式返回空结果，回退到规则方法")
+                    logger.warning(f"[Stage1] ✗ LLM 模式返回空结果，回退到规则方法")
             except Exception as e:
-                logger.warning(f"[Stage1] LLM 模式失败，回退到规则方法: {e}")
+                logger.error(f"[Stage1] ✗ LLM 模式异常，回退到规则方法: {type(e).__name__}: {e}", exc_info=True)
+        else:
+            logger.info(f"[Stage1] LLM 未启用 (enabled={self.llm_enabled}, client={self.llm_client is not None})")
         
         # 回退到规则方法
         logger.info(f"[Stage1] 使用规则方法进行指代消解")
@@ -851,49 +854,36 @@ class CoreferenceResolver:
         # 0. 噪声过滤（复用规则方法的逻辑）
         if self._should_skip(text):
             logger.debug(f"[Stage1-LLM] 跳过噪声文本: chunk_id={chunk.id}")
-            return CorefResult(
-                resolved_text=None,
-                alias_map={},
-                mode="skip",
-                coverage=0.0,
-                conflict=0.0,
-                metrics={},
-                provenance=[]
-            )
+            return None  # 返回 None，让规则方法处理
         
         # 1. 检测提及和候选先行词（复用规则方法）
         mentions = self._detect_mentions(text)
         if not mentions:
-            logger.info(f"[Stage1-LLM] 未检测到提及，跳过消解")
-            return CorefResult(
-                resolved_text=text,
-                alias_map={},
-                mode="skip",
-                coverage=0.0,
-                conflict=0.0,
-                metrics={},
-                provenance=[]
-            )
+            logger.info(f"[Stage1-LLM] 未检测到提及，回退到规则方法")
+            return None  # 返回 None，让规则方法处理
         
         # 2. 提取括号别名（强约束）
         parenthesis_aliases = self._extract_parenthesis_aliases(text)
+        logger.info(f"[Stage1-LLM] 提取到 {len(parenthesis_aliases)} 个括号别名")
         
         # 3. 生成候选先行词
         antecedents = self._generate_antecedents(text, mentions)
-        
-        # 调试：打印候选先行词
-        logger.debug(f"[Stage1-LLM] 生成的候选先行词: {[ant.text for ant in antecedents]}")
+        logger.info(f"[Stage1-LLM] 生成 {len(antecedents)} 个候选先行词")
+        logger.debug(f"[Stage1-LLM] 候选先行词: {[ant.text for ant in antecedents[:10]]}")
         
         # 4. 构造 LLM prompt
+        logger.info(f"[Stage1-LLM] 构造 LLM prompt...")
         prompt = self._build_llm_prompt(text, mentions, antecedents, parenthesis_aliases)
         
         try:
             # 5. 调用 LLM
+            logger.info(f"[Stage1-LLM] 准备调用 LLM...")
             messages = [
                 {"role": "system", "content": "你是一个专业的中文指代消解助手。请根据给定的文本、提及和候选先行词，为每个提及选择最合理的先行词。"},
                 {"role": "user", "content": prompt}
             ]
             
+            logger.info(f"[Stage1-LLM] 调用 LLM chat_completion...")
             # 调用 LLM（使用 json_mode 参数）
             response = self.llm_client.chat_completion(
                 messages=messages,
@@ -901,23 +891,28 @@ class CoreferenceResolver:
                 json_mode=True
             )
             
-            logger.debug(f"[Stage1-LLM] LLM原始响应: {response[:300]}...")
+            logger.info(f"[Stage1-LLM] ✓ LLM 返回响应 (长度={len(response) if response else 0} 字符)")
+            logger.debug(f"[Stage1-LLM] LLM原始响应: {response[:300] if response else 'None'}...")
             
             # 如果响应为空，返回 None
             if not response or not response.strip():
-                logger.warning(f"[Stage1-LLM] LLM 返回空响应")
+                logger.warning(f"[Stage1-LLM] LLM 返回空响应，回退到规则方法")
                 return None
             
             # 6. 解析 LLM 响应（尝试提取 JSON 部分）
+            logger.info(f"[Stage1-LLM] 解析 LLM JSON 响应...")
             llm_result = self._parse_llm_json_response(response)
             if not llm_result:
-                logger.warning(f"[Stage1-LLM] LLM结果解析失败，返回None")
+                logger.warning(f"[Stage1-LLM] LLM结果解析失败，回退到规则方法")
                 return None
             
-            logger.debug(f"[Stage1-LLM] LLM结果解析成功: {type(llm_result)}")
+            logger.info(f"[Stage1-LLM] ✓ LLM结果解析成功: {type(llm_result).__name__}")
             
             # 7. 转换为 CorefResult
-            return self._parse_llm_result(text, mentions, antecedents, parenthesis_aliases, llm_result)
+            logger.info(f"[Stage1-LLM] 转换为 CorefResult...")
+            result = self._parse_llm_result(text, mentions, antecedents, parenthesis_aliases, llm_result)
+            logger.info(f"[Stage1-LLM] ✓ LLM 模式完成: mode={result.mode}, coverage={result.coverage:.2%}, conflict={result.conflict:.2%}")
+            return result
             
         except json.JSONDecodeError as e:
             logger.error(f"[Stage1-LLM] JSON 解析失败: {e}")
@@ -1123,7 +1118,6 @@ class CoreferenceResolver:
             
             # 验证先行词是否在原文中存在且位置合理
             # 在原文中搜索该先行词
-            import re
             pattern = re.compile(re.escape(antecedent_text))
             matches_in_text = list(pattern.finditer(text))
             
@@ -1135,7 +1129,6 @@ class CoreferenceResolver:
                 closest_pos = max(valid_positions)
                 
                 # 创建一个虚拟的Antecedent对象
-                from ..models.graph import Antecedent
                 virtual_antecedent = Antecedent(
                     text=antecedent_text,
                     position=closest_pos,
