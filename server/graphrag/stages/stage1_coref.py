@@ -1057,6 +1057,7 @@ class CoreferenceResolver:
         
         # 初始化 LLM 模式解析器（如果可用）
         self.llm_resolver: Optional[LLMResolver] = None
+        self.llm_client: Optional[BaseAIClient] = None
         self.llm_enabled = False
         
         try:
@@ -1076,6 +1077,7 @@ class CoreferenceResolver:
                     model=model,
                     base_url=base_url
                 )
+                self.llm_client = llm_client
                 self.llm_resolver = LLMResolver(self.thresholds, llm_client)
                 self.llm_enabled = True
                 logger.info(f"CoreferenceResolver: LLM 模式已启用 (provider={provider}, model={model})")
